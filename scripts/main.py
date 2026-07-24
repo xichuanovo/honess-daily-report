@@ -53,6 +53,33 @@ RECENT_DAYS = 7
 
 # ==================== 新闻抓取 ====================
 
+def resolve_google_news_link(url):
+    """解析 Google News 重定向链接，返回真实文章来源 URL"""
+    if not url or 'news.google.com' not in url:
+        return url
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'},
+            method='HEAD'
+        )
+        # 允许重定向
+        opener = urllib.request.build_opener(
+            urllib.request.HTTPRedirectHandler(),
+            urllib.request.HTTPSRedirectHandler()
+        )
+        with opener.open(req, timeout=10) as resp:
+            final = resp.geturl()
+            # 过滤掉仍然指向 google 的中间页
+            if final and 'google.com' not in final:
+                return final
+            # 尝试从响应头 Location 再取（HTTPRedirectHandler 已处理）
+            return final if final else url
+    except Exception as e:
+        print(f"    链接解析失败: {e}")
+        return url
+
+
 def fetch_rss(query):
     """从 Google News RSS 获取新闻，返回真实来源链接"""
     encoded_query = urllib.parse.quote(query)
@@ -74,8 +101,14 @@ def fetch_rss(query):
                 title = parts[0]
                 source = parts[1] if len(parts) > 1 else ''
 
-            # 优先使用真实来源 URL，避免邮件中打开 Google News 被墙
-            link = source_url if source_url else (entry.link if hasattr(entry, 'link') else '')
+            # 优先解析真实来源 URL，避免邮件/工具中打开 Google News 被墙
+            raw_link = entry.link if hasattr(entry, 'link') else ''
+            if raw_link and 'news.google.com' in raw_link:
+                link = resolve_google_news_link(raw_link)
+            elif source_url and source_url.startswith('http'):
+                link = source_url
+            else:
+                link = raw_link
 
             # 清理摘要
             summary = ''
@@ -215,8 +248,14 @@ def fetch_policies():
                 title = parts[0]
                 source = parts[1] if len(parts) > 1 else ''
 
-            # 优先使用真实来源 URL，避免被墙
-            link = source_url if source_url else (entry.link if hasattr(entry, 'link') else '')
+            # 优先解析真实来源 URL，避免被墙
+            raw_link = entry.link if hasattr(entry, 'link') else ''
+            if raw_link and 'news.google.com' in raw_link:
+                link = resolve_google_news_link(raw_link)
+            elif source_url and source_url.startswith('http'):
+                link = source_url
+            else:
+                link = raw_link
 
             # 判断状态
             text = title.lower()
