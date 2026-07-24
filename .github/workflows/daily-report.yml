@@ -1,0 +1,31 @@
+name: 泓济环保行业日报
+on:
+  schedule:
+    # UTC 00:00 = 北京时间 08:00
+    - cron: '0 0 * * *'
+  # 允许手动触发（用于测试）
+  workflow_dispatch:
+
+jobs:
+  daily-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: pip install -r scripts/requirements.txt
+
+      - name: 抓取新闻并发送邮件
+        run: python scripts/main.py
+        env:
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SENDER_NAME: ${{ secrets.SENDER_NAME }}
