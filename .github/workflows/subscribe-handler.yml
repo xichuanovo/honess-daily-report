@@ -1,0 +1,39 @@
+name: 处理新订阅
+on:
+  repository_dispatch:
+    types: [subscribe]
+
+permissions:
+  contents: write
+
+jobs:
+  add-subscriber:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 添加邮箱到 subscribers.json
+        env:
+          EMAIL: ${{ github.event.client_payload.email }}
+        run: |
+          python3 -c "
+          import json
+          with open('subscribers.json', 'r', encoding='utf-8') as f:
+              data = json.load(f)
+          email = '${EMAIL}'
+          if email not in data['emails']:
+              data['emails'].append(email)
+              with open('subscribers.json', 'w', encoding='utf-8') as f:
+                  json.dump(data, f, ensure_ascii=False, indent=2)
+              print(f'Added: {email}')
+          else:
+              print(f'Already exists: {email}')
+          "
+
+      - name: 提交变更
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add subscribers.json
+          git diff --staged --quiet || git commit -m "subscribe: add ${{ github.event.client_payload.email }}"
+          git push
