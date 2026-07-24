@@ -7,6 +7,9 @@ on:
 jobs:
   handle-subscribe:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
     if: startsWith(github.event.issue.title, '订阅日报：')
     steps:
       - name: Checkout repository
