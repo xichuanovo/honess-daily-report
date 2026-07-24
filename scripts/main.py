@@ -11,6 +11,7 @@ import smtplib
 import os
 import re
 import time
+import urllib.parse
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr
@@ -54,7 +55,8 @@ RECENT_DAYS = 7
 
 def fetch_rss(query):
     """从 Google News RSS 获取新闻"""
-    url = f"https://news.google.com/rss/search?q={query}&hl=zh-CN&gl=CN&ceid=CN:zh"
+    encoded_query = urllib.parse.quote(query)
+    url = f"https://news.google.com/rss/search?q={encoded_query}&hl=zh-CN&gl=CN&ceid=CN:zh"
     try:
         feed = feedparser.parse(url)
         articles = []
@@ -336,7 +338,7 @@ def send_emails(html, subscribers):
     smtp_port = int(os.environ.get('SMTP_PORT', '465'))
     smtp_user = os.environ.get('SMTP_USER', '')
     smtp_pass = os.environ.get('SMTP_PASS', '')
-    sender_name = os.environ.get('SENDER_NAME', '泓济环保')
+    sender_name = os.environ.get('SMTP_FROM_NAME', os.environ.get('SENDER_NAME', '泓济环保'))
 
     now = datetime.utcnow() + timedelta(hours=8)
     subject = f'泓济环保\u00b7行业日报 {now.strftime("%Y年%m月%d日")}'
