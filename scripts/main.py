@@ -14,7 +14,7 @@ import time
 import urllib.parse
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from email.utils import formataddr
+from email.utils import formataddr, formatdate, make_msgid
 from datetime import datetime, timedelta
 from jinja2 import Template
 
@@ -454,6 +454,13 @@ def send_emails(html, subscribers):
             msg['Subject'] = subject
             msg['From'] = formataddr((sender_name, smtp_user))
             msg['To'] = email
+            msg['Date'] = formatdate(localtime=True)
+            msg['Message-ID'] = make_msgid(idstring='honess-daily', domain='qq.com')
+            msg['Reply-To'] = smtp_user
+            msg['List-Unsubscribe'] = f'<mailto:{smtp_user}?subject=unsubscribe>'
+            msg['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click'
+            msg['X-Mailer'] = 'HonessDailyReport/1.0'
+            msg['Auto-Submitted'] = 'auto-generated'
             msg.attach(MIMEText(html, 'html', 'utf-8'))
 
             with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30) as server:
