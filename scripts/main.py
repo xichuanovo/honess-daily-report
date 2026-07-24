@@ -53,6 +53,11 @@ RECENT_DAYS = 7
 
 # ==================== 新闻抓取 ====================
 
+def is_google_news_link(url):
+    """判断是否为 Google News 重定向链接（国内无法访问）"""
+    return url and 'news.google.com' in url
+
+
 def resolve_google_news_link(url):
     """解析 Google News 重定向链接，返回真实文章来源 URL"""
     if not url or 'news.google.com' not in url:
@@ -333,10 +338,12 @@ def generate_html(news, policies):
     featured = news[0] if news else None
     if featured:
         featured['date_short'] = format_date_short(featured.get('published_parsed'))
+        featured['has_valid_link'] = featured.get('link', '') and not is_google_news_link(featured.get('link', ''))
 
     two_col_news = news[1:4] if len(news) > 1 else []
     for n in two_col_news:
         n['date_short'] = format_date_short(n.get('published_parsed'))
+        n['has_valid_link'] = n.get('link', '') and not is_google_news_link(n.get('link', ''))
 
     briefs_raw = news[4:] if len(news) > 4 else []
     briefs = []
@@ -349,6 +356,10 @@ def generate_html(news, policies):
         })
 
     keywords = generate_keywords(news)
+
+    # 为政策标记是否有有效链接
+    for p in policies:
+        p['has_valid_link'] = p.get('link', '') and not is_google_news_link(p.get('link', ''))
 
     # 统计
     tag_counts = {'政策': 0, '技术': 0, '市场': 0}
@@ -394,7 +405,7 @@ def save_news_json(news, policies):
             'source': n.get('source', ''),
             'time': time_str,
             'tag': n.get('tag', '市场'),
-            'url': n.get('link', ''),
+            'url': n.get('link', '') if not is_google_news_link(n.get('link', '')) else '',
         })
 
     law_items = []
@@ -419,7 +430,7 @@ def save_news_json(news, policies):
             'title': p.get('title', ''),
             'date': date_str,
             'status': p.get('status', '新发布'),
-            'url': p.get('link', ''),
+            'url': p.get('link', '') if not is_google_news_link(p.get('link', '')) else '',
         })
 
     data = {
