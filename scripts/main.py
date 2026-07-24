@@ -417,7 +417,14 @@ def main():
     subs_path = os.path.join(os.path.dirname(__file__), '..', 'subscribers.json')
     with open(subs_path, 'r', encoding='utf-8') as f:
         subscribers = json.load(f)['emails']
-    print(f"  订阅者: {len(subscribers)} 人")
+
+    # 如果指定了立即发送目标（如新订阅者），则只发给这些邮箱
+    immediate_env = os.environ.get('IMMEDIATE_RECIPIENTS', '').strip()
+    if immediate_env:
+        subscribers = [e.strip() for e in immediate_env.split(',') if e.strip()]
+        print(f"  立即发送模式: {len(subscribers)} 人 -> {subscribers}")
+    else:
+        print(f"  订阅者: {len(subscribers)} 人")
 
     # 5. 发送邮件
     print("\n[5/5] 发送邮件...")
