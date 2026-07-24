@@ -54,7 +54,7 @@ RECENT_DAYS = 7
 # ==================== 新闻抓取 ====================
 
 def fetch_rss(query):
-    """从 Google News RSS 获取新闻"""
+    """从 Google News RSS 获取新闻，返回真实来源链接"""
     encoded_query = urllib.parse.quote(query)
     url = f"https://news.google.com/rss/search?q={encoded_query}&hl=zh-CN&gl=CN&ceid=CN:zh"
     try:
@@ -64,12 +64,18 @@ def fetch_rss(query):
             # Google News 标题格式: "标题 - 来源"
             title = entry.title
             source = ''
+            source_url = ''
             if hasattr(entry, 'source') and hasattr(entry.source, 'title'):
                 source = entry.source.title
+                if hasattr(entry.source, 'href'):
+                    source_url = entry.source.href
             elif ' - ' in title:
                 parts = title.rsplit(' - ', 1)
                 title = parts[0]
                 source = parts[1] if len(parts) > 1 else ''
+
+            # 优先使用真实来源 URL，避免邮件中打开 Google News 被墙
+            link = source_url if source_url else (entry.link if hasattr(entry, 'link') else '')
 
             # 清理摘要
             summary = ''
@@ -84,7 +90,7 @@ def fetch_rss(query):
             articles.append({
                 'title': title.strip(),
                 'source': source.strip(),
-                'link': entry.link if hasattr(entry, 'link') else '',
+                'link': link,
                 'summary': summary,
                 'published': published,
                 'published_parsed': published_parsed,
