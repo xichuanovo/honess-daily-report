@@ -1,39 +1,122 @@
-name: 处理新订阅
-on:
-  repository_dispatch:
-    types: [subscribe]
+name: 自动处理日报订阅
 
-permissions:
-  contents: write
+on:
+  issues:
+    types: [opened]
 
 jobs:
-  add-subscriber:
+  handle-subscribe:
     runs-on: ubuntu-latest
+    if: startsWith(github.event.issue.title, '订阅日报：')
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: 添加邮箱到 subscribers.json
-        env:
-          EMAIL: ${{ github.event.client_payload.email }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Extract email and update subscribers
+        id: update
         run: |
-          python3 -c "
-          import json
-          with open('subscribers.json', 'r', encoding='utf-8') as f:
-              data = json.load(f)
-          email = '${EMAIL}'
-          if email not in data['emails']:
-              data['emails'].append(email)
-              with open('subscribers.json', 'w', encoding='utf-8') as f:
-                  json.dump(data, f, ensure_ascii=False, indent=2)
-              print(f'Added: {email}')
-          else:
-              print(f'Already exists: {email}')
-          "
+          python << 'PYEOF'
+          import json, re, os, sys
 
-      - name: 提交变更
+          issue_title = os.environ.get('ISSUE_TITLE', '')
+          print(f'Issue title: {issue_title}')
+
+          # Extract email from title: 订阅日报：xxx@xxx.com
+          m = re.search(r'订阅日报[：:]\s*([^\s]+@[^\s]+)', issue_title)
+          if not m:
+              print('ERROR: Could not extract email from title')
+              sys.exit(1)
+
+          email = m.group(1).strip().lower()
+          print(f'Extracted email: {email}')
+
+          # Validate email format
+          if not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', email):
+              print(f'ERROR: Invalid email format: {email}')
+              sys.exit(1)
+
+          # Read subscribers.json
+          subscribers_path = 'subscribers.json'
+          try:
+              with open(subscribers_path, 'r', encoding='utf-8') as f:
+                  data = json.load(f)
+          except Exception as e:
+              print(f'Warning: could not read subscribers.json: {e}, starting fresh')
+              data = {'emails': []}
+
+          emails = data.get('emails', [])
+          if email in emails:
+              print(f'Email already subscribed: {email}')
+              with open(os.environ.get('GITHUB_OUTPUT', '/dev/null'), 'a', encoding='utf-8') as f:
+                  f.write(f'email={email}\n')
+                  f.write('already=true\n')
+              sys.exit(0)
+
+          emails.append(email)
+          data['emails'] = emails
+
+          with open(subscribers_path, 'w', encoding='utf-8') as f:
+              json.dump(data, f, ensure_ascii=False, indent=2)
+
+          print(f'Added email: {email}')
+          print(f'Total subscribers: {len(emails)}')
+
+          with open(os.environ.get('GITHUB_OUTPUT', '/dev/null'), 'a', encoding='utf-8') as f:
+              f.write(f'email={email}\n')
+              f.write('already=false\n')
+          PYEOF
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+
+      - name: Commit and push subscribers.json
+        if: steps.update.outputs.already == 'false'
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add subscribers.json
-          git diff --staged --quiet || git commit -m "subscribe: add ${{ github.event.client_payload.email }}"
+          git diff --cached --quiet || git commit -m "chore: add subscriber ${{ steps.update.outputs.email }} [skip ci]"
           git push
+
+      - name: Close issue with comment
+        run: |
+          python << 'PYEOF'
+          import requests, os, json
+
+          token = os.environ['GITHUB_TOKEN']
+          repo = os.environ['GITHUB_REPOSITORY']
+          issue_number = os.environ['ISSUE_NUMBER']
+          email = os.environ.get('EMAIL', '')
+          already = os.environ.get('ALREADY', 'false') == 'true'
+
+          headers = {
+              'Authorization': f'Bearer {token}',
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28'
+          }
+
+          if already:
+              body = f'邮箱 **{email}** 已经在订阅列表中，无需重复订阅。\\n\\n本 issue 已自动关闭。'
+          else:
+              body = f'✅ 已自动将 **{email}** 加入日报订阅列表。\\n\\n从明天早上 8:00（北京时间）开始，该邮箱将自动收到泓济环保行业日报。\\n\\n如需退订，请回复邮件「退订」或联系管理员。\\n\\n本 issue 已自动关闭。'
+
+          # Add comment
+          comment_url = f'https://api.github.com/repos/{repo}/issues/{issue_number}/comments'
+          r = requests.post(comment_url, headers=headers, json={'body': body})
+          print(f'Comment status: {r.status_code}')
+
+          # Close issue
+          close_url = f'https://api.github.com/repos/{repo}/issues/{issue_number}'
+          r = requests.patch(close_url, headers=headers, json={'state': 'closed'})
+          print(f'Close status: {r.status_code}')
+          PYEOF
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          EMAIL: ${{ steps.update.outputs.email }}
+          ALREADY: ${{ steps.update.outputs.already }}
