@@ -60,6 +60,19 @@ def is_google_news_link(url):
     return url and 'news.google.com' in url
 
 
+def extract_real_url(link):
+    """从 Bing News 跳转链接中提取真实文章 URL"""
+    if not link:
+        return link
+    if 'bing.com/news/apiclick' in link:
+        parsed = urllib.parse.urlparse(link)
+        params = urllib.parse.parse_qs(parsed.query)
+        real_url = params.get('url', [None])[0]
+        if real_url:
+            return real_url
+    return link
+
+
 def fetch_page_content(url):
     """抓取指定 URL 页面的正文内容，返回 (url, content)"""
     try:
@@ -106,7 +119,7 @@ def fetch_rss(query):
             articles.append({
                 'title': title.strip(),
                 'source': source.strip(),
-                'link': link,
+                'link': extract_real_url(link),
                 'summary': summary,
                 'content': None,
                 'published': published,
@@ -215,14 +228,14 @@ def select_news(articles, count=6):
 
 def fetch_policies():
     """获取政策法规 — 使用 Bing News RSS"""
-    encoded_q = urllib.parse.quote('排放标准 污染防治')
+    encoded_q = urllib.parse.quote('生态环境部 环保政策')
     url = f"https://www.bing.com/news/search?q={encoded_q}&format=rss"
     try:
         feed = feedparser.parse(url)
         policies = []
         for entry in feed.entries[:10]:
             title = entry.title if hasattr(entry, 'title') else ''
-            link = entry.link if hasattr(entry, 'link') else ''
+            link = extract_real_url(entry.link if hasattr(entry, 'link') else '')
             source = ''
             if hasattr(entry, 'source') and hasattr(entry.source, 'title'):
                 source = entry.source.title
