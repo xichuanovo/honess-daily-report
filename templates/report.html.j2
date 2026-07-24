@@ -140,16 +140,16 @@ body{background:#e8e4d8;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",
     <div class="featured">
       <div class="kicker">&#9733; 头版头条</div>
       <h1>{{ featured.title }}</h1>
-      {% if featured.summary %}
-      <div class="deck">{{ featured.summary[:120] }}{% if featured.summary|length > 120 %}...{% endif %}</div>
+      {% if featured.display_text %}
+      <div class="deck">{{ featured.display_text[:150] }}{% if featured.display_text|length > 150 %}...{% endif %}</div>
       {% endif %}
       <div class="byline">
         <span>来源：{{ featured.source or '网络综合' }}</span>
         <span>{{ featured.date_short }}</span>
       </div>
-      <div class="body-text">{{ featured.summary }}</div>
+      <div class="body-text">{{ featured.display_text }}</div>
       {% if featured.has_valid_link and featured.link %}
-      <a class="read-more" href="{{ featured.link }}" target="_blank" rel="noopener noreferrer">阅读全文 &#9656;</a>
+      <a class="read-more" href="{{ featured.link }}" target="_blank" rel="noopener noreferrer">查看原文 &#9656;</a>
       {% endif %}
     </div>
     {% endif %}
@@ -160,11 +160,11 @@ body{background:#e8e4d8;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",
       <div class="story">
         <h3>{{ story.title }}</h3>
         <div class="meta">{{ story.tag }} · {{ story.source or '网络综合' }} · {{ story.date_short }}</div>
-        {% if story.summary %}
-        <p>{{ story.summary[:120] }}{% if story.summary|length > 120 %}...{% endif %}</p>
+        {% if story.display_text %}
+        <p>{{ story.display_text[:200] }}{% if story.display_text|length > 200 %}...{% endif %}</p>
         {% endif %}
         {% if story.has_valid_link and story.link %}
-        <a class="read-more" href="{{ story.link }}" target="_blank" rel="noopener noreferrer">阅读 &#9656;</a>
+        <a class="read-more" href="{{ story.link }}" target="_blank" rel="noopener noreferrer">查看原文 &#9656;</a>
         {% endif %}
       </div>
       {% endfor %}

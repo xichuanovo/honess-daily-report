@@ -12,11 +12,13 @@ import os
 import re
 import time
 import urllib.parse
+import requests as req_lib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr, formatdate, make_msgid
 from datetime import datetime, timedelta
 from jinja2 import Template
+from trafilatura import extract as traf_extract
 
 # ==================== 配置 ====================
 
@@ -59,23 +61,62 @@ def is_google_news_link(url):
 
 
 def resolve_google_news_link(url):
-    """解析 Google News 重定向链接，返回真实文章来源 URL"""
+    """解析 Google News 重定向链接，返回真实文章来源 URL。
+    
+    依次尝试三种方式：
+    1. googlenewsdecoder 库（调用 Google 内部 API）
+    2. HTTP 重定向跟随（requests 自动跟随 302 跳转）
+    3. 返回原始 Google News 链接作为最后兜底
+    """
     if not url or 'news.google.com' not in url:
-        return url
+        return url, None
+
+    # 方式1: googlenewsdecoder
     try:
         from googlenewsdecoder import decoderv2, decoderv1
-        # v2 会调用 Google 内部接口，在 GitHub Actions 海外节点通常可用
         decoded = decoderv2(url)
-        if decoded and decoded.startswith('http'):
-            return decoded
-        # v2 失败时尝试本地 v1 解码
+        if decoded and decoded.startswith('http') and 'news.google.com' not in decoded:
+            print(f"    [decoder v2] -> {decoded[:80]}")
+            real_url, content = fetch_page_content(decoded)
+            return real_url, content
         decoded = decoderv1(url)
-        if decoded and decoded.startswith('http'):
-            return decoded
-        return url
+        if decoded and decoded.startswith('http') and 'news.google.com' not in decoded:
+            print(f"    [decoder v1] -> {decoded[:80]}")
+            real_url, content = fetch_page_content(decoded)
+            return real_url, content
     except Exception as e:
-        print(f"    链接解析失败: {e}")
-        return url
+        print(f"    [decoder] 失败: {e}")
+
+    # 方式2: HTTP 重定向跟随
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+        resp = req_lib.get(url, timeout=15, allow_redirects=True, headers=headers)
+        final_url = resp.url
+        if final_url and 'news.google.com' not in final_url:
+            print(f"    [redirect] -> {final_url[:80]}")
+            content = traf_extract(resp.text, include_comments=False, include_tables=False)
+            return final_url, content
+    except Exception as e:
+        print(f"    [redirect] 失败: {e}")
+
+    # 方式3: 兜底，返回原始链接和 None
+    return url, None
+
+
+def fetch_page_content(url):
+    """抓取指定 URL 页面的正文内容，返回 (url, content)"""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+        resp = req_lib.get(url, timeout=15, headers=headers, allow_redirects=True)
+        content = traf_extract(resp.text, include_comments=False, include_tables=False)
+        return resp.url, content
+    except Exception as e:
+        print(f"    [fetch] 失败: {e}")
+        return url, None
 
 
 def fetch_rss(query):
@@ -99,10 +140,11 @@ def fetch_rss(query):
                 title = parts[0]
                 source = parts[1] if len(parts) > 1 else ''
 
-            # 优先解析真实来源 URL，避免邮件/工具中打开 Google News 被墙
+            # 优先解析真实来源 URL + 抓取正文
             raw_link = entry.link if hasattr(entry, 'link') else ''
+            article_content = None
             if raw_link and 'news.google.com' in raw_link:
-                link = resolve_google_news_link(raw_link)
+                link, article_content = resolve_google_news_link(raw_link)
             elif source_url and source_url.startswith('http'):
                 link = source_url
             else:
@@ -123,6 +165,7 @@ def fetch_rss(query):
                 'source': source.strip(),
                 'link': link,
                 'summary': summary,
+                'content': article_content,
                 'published': published,
                 'published_parsed': published_parsed,
             })
@@ -246,10 +289,11 @@ def fetch_policies():
                 title = parts[0]
                 source = parts[1] if len(parts) > 1 else ''
 
-            # 优先解析真实来源 URL，避免被墙
+            # 优先解析真实来源 URL + 抓取正文
             raw_link = entry.link if hasattr(entry, 'link') else ''
+            policy_content = None
             if raw_link and 'news.google.com' in raw_link:
-                link = resolve_google_news_link(raw_link)
+                link, policy_content = resolve_google_news_link(raw_link)
             elif source_url and source_url.startswith('http'):
                 link = source_url
             else:
@@ -277,6 +321,7 @@ def fetch_policies():
                 'source': source.strip(),
                 'date': date_display,
                 'status': status,
+                'content': policy_content,
             })
 
         # 去重
@@ -339,11 +384,14 @@ def generate_html(news, policies):
     if featured:
         featured['date_short'] = format_date_short(featured.get('published_parsed'))
         featured['has_valid_link'] = featured.get('link', '') and not is_google_news_link(featured.get('link', ''))
+        # 展示内容：优先用抓取的正文，回退到 RSS 摘要
+        featured['display_text'] = (featured.get('content') or featured.get('summary') or '')[:500]
 
     two_col_news = news[1:4] if len(news) > 1 else []
     for n in two_col_news:
         n['date_short'] = format_date_short(n.get('published_parsed'))
         n['has_valid_link'] = n.get('link', '') and not is_google_news_link(n.get('link', ''))
+        n['display_text'] = (n.get('content') or n.get('summary') or '')[:200]
 
     briefs_raw = news[4:] if len(news) > 4 else []
     briefs = []
@@ -351,15 +399,16 @@ def generate_html(news, policies):
         briefs.append({
             'title': n['title'],
             'tag': n['tag'],
-            'summary': (n.get('summary', '') or '')[:60] + ('...' if len(n.get('summary', '')) > 60 else ''),
+            'summary': (n.get('content') or n.get('summary', '') or '')[:80] + ('...' if len(n.get('content') or n.get('summary', '')) > 80 else ''),
             'date': now.strftime('%m-%d'),
         })
 
     keywords = generate_keywords(news)
 
-    # 为政策标记是否有有效链接
+    # 为政策标记是否有有效链接 + 准备展示内容
     for p in policies:
         p['has_valid_link'] = p.get('link', '') and not is_google_news_link(p.get('link', ''))
+        p['display_text'] = (p.get('content') or '')[:150]
 
     # 统计
     tag_counts = {'政策': 0, '技术': 0, '市场': 0}
@@ -406,6 +455,7 @@ def save_news_json(news, policies):
             'time': time_str,
             'tag': n.get('tag', '市场'),
             'url': n.get('link', '') if not is_google_news_link(n.get('link', '')) else '',
+            'content': (n.get('content') or '')[:300],
         })
 
     law_items = []
@@ -431,6 +481,7 @@ def save_news_json(news, policies):
             'date': date_str,
             'status': p.get('status', '新发布'),
             'url': p.get('link', '') if not is_google_news_link(p.get('link', '')) else '',
+            'content': (p.get('content') or '')[:300],
         })
 
     data = {
@@ -513,10 +564,52 @@ def main():
     news = select_news(articles, NEWS_COUNT)
     print(f"  选中: {len(news)} 条")
 
+    # 1.5 对选中新闻补充抓取原文（仅对尚未提取正文的条目）
+    print("\n[1.5/6] 抓取新闻原文...")
+    for i, n in enumerate(news):
+        if n.get('content'):
+            print(f"  [{i+1}/{len(news)}] 已有正文: {n['title'][:30]}...")
+            continue
+        link = n.get('link', '')
+        if link and not is_google_news_link(link):
+            print(f"  [{i+1}/{len(news)}] 抓取: {n['title'][:30]}...")
+            real_url, content = fetch_page_content(link)
+            n['link'] = real_url
+            n['content'] = content
+        elif link:
+            print(f"  [{i+1}/{len(news)}] 解析+抓取: {n['title'][:30]}...")
+            real_url, content = resolve_google_news_link(link)
+            n['link'] = real_url
+            n['content'] = content
+        else:
+            print(f"  [{i+1}/{len(news)}] 无链接: {n['title'][:30]}...")
+        time.sleep(0.5)
+
     # 2. 抓取政策法规
     print("\n[2/6] 抓取政策法规...")
     policies = fetch_policies()
     print(f"  获取: {len(policies)} 条")
+
+    # 2.5 对政策法规补充抓取原文
+    print("\n[2.5/6] 抓取政策原文...")
+    for i, p in enumerate(policies):
+        if p.get('content'):
+            print(f"  [{i+1}/{len(policies)}] 已有正文: {p['title'][:30]}...")
+            continue
+        link = p.get('link', '')
+        if link and not is_google_news_link(link):
+            print(f"  [{i+1}/{len(policies)}] 抓取: {p['title'][:30]}...")
+            real_url, content = fetch_page_content(link)
+            p['link'] = real_url
+            p['content'] = content
+        elif link:
+            print(f"  [{i+1}/{len(policies)}] 解析+抓取: {p['title'][:30]}...")
+            real_url, content = resolve_google_news_link(link)
+            p['link'] = real_url
+            p['content'] = content
+        else:
+            print(f"  [{i+1}/{len(policies)}] 无链接: {p['title'][:30]}...")
+        time.sleep(0.5)
 
     # 3. 生成 HTML
     print("\n[3/6] 生成日报HTML...")
