@@ -60,84 +60,6 @@ def is_google_news_link(url):
     return url and 'news.google.com' in url
 
 
-def resolve_google_news_link(url):
-    """解析 Google News 重定向链接，返回 (真实URL, 正文内容)。
-    
-    依次独立尝试多种方式，任一成功即返回：
-    1. googlenewsdecoder v2（调用 Google 内部 API）
-    2. googlenewsdecoder v1（本地 protobuf 解码）
-    3. HTTP 请求 Google News 页面 + HTML 解析提取真实 URL
-    """
-    if not url or 'news.google.com' not in url:
-        return url, None
-
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    }
-
-    # 方式1: googlenewsdecoder v2
-    try:
-        from googlenewsdecoder import decoderv2
-        decoded = decoderv2(url)
-        if decoded and decoded.startswith('http') and 'news.google.com' not in decoded:
-            print(f"    [v2] -> {decoded[:80]}")
-            return fetch_page_content(decoded)
-    except Exception as e:
-        print(f"    [v2] 失败: {e}")
-
-    # 方式2: googlenewsdecoder v1（本地解码，不依赖网络）
-    try:
-        from googlenewsdecoder import decoderv1
-        decoded = decoderv1(url)
-        if decoded and decoded.startswith('http') and 'news.google.com' not in decoded:
-            print(f"    [v1] -> {decoded[:80]}")
-            return fetch_page_content(decoded)
-    except Exception as e:
-        print(f"    [v1] 失败: {e}")
-
-    # 方式3: 直接 HTTP 请求 Google News 页面，从 HTML 中提取真实 URL
-    try:
-        resp = req_lib.get(url, timeout=15, allow_redirects=True, headers=headers)
-        html = resp.text
-        final_url = resp.url
-
-        # 3a: 如果 HTTP 重定向已跳转到真实页面
-        if final_url and 'news.google.com' not in final_url:
-            print(f"    [redirect] -> {final_url[:80]}")
-            content = traf_extract(html, include_comments=False, include_tables=False)
-            return final_url, content
-
-        # 3b: 从 HTML 中正则提取真实 URL
-        # 模式: data-n-au="https://..."
-        match = re.search(r'data-n-au="(https?://[^"]+)"', html)
-        if match:
-            real_url = match.group(1).replace('\\u003d', '=').replace('\\/', '/')
-            if 'news.google.com' not in real_url:
-                print(f"    [data-n-au] -> {real_url[:80]}")
-                return fetch_page_content(real_url)
-
-        # 模式: "https://..." 在 JSON 数据中（排除 google 自身域名）
-        for m in re.finditer(r'"(https?://(?:www\.)?(?!news\.google)[^"]+)"', html):
-            real_url = m.group(1)
-            if 'google.com' not in real_url and 'gstatic' not in real_url and 'googleapis' not in real_url:
-                print(f"    [html-regex] -> {real_url[:80]}")
-                return fetch_page_content(real_url)
-
-        # 模式: meta refresh 重定向
-        match = re.search(r'<meta[^>]+refresh[^>]+url=(https?://[^"\'>\s]+)', html, re.IGNORECASE)
-        if match:
-            real_url = match.group(1)
-            if 'news.google.com' not in real_url:
-                print(f"    [meta-refresh] -> {real_url[:80]}")
-                return fetch_page_content(real_url)
-
-        print(f"    [html-parse] 未在页面中找到真实URL")
-    except Exception as e:
-        print(f"    [http-fetch] 失败: {e}")
-
-    return url, None
-
-
 def fetch_page_content(url):
     """抓取指定 URL 页面的正文内容，返回 (url, content)"""
     try:
@@ -153,43 +75,30 @@ def fetch_page_content(url):
 
 
 def fetch_rss(query):
-    """从 Google News RSS 获取新闻，返回真实来源链接"""
+    """从 Bing News RSS 获取新闻，返回带真实链接的文章列表"""
     encoded_query = urllib.parse.quote(query)
-    url = f"https://news.google.com/rss/search?q={encoded_query}&hl=zh-CN&gl=CN&ceid=CN:zh"
+    # Bing News RSS — 直接提供原始文章链接，国内可访问
+    url = f"https://www.bing.com/news/search?q={encoded_query}&format=rss&setlang=zh-Hans"
     try:
         feed = feedparser.parse(url)
         articles = []
         for entry in feed.entries:
-            # Google News 标题格式: "标题 - 来源"
-            title = entry.title
+            title = entry.title if hasattr(entry, 'title') else ''
+            link = entry.link if hasattr(entry, 'link') else ''
+
+            # 来源
             source = ''
-            source_url = ''
             if hasattr(entry, 'source') and hasattr(entry.source, 'title'):
                 source = entry.source.title
-                if hasattr(entry.source, 'href'):
-                    source_url = entry.source.href
-            elif ' - ' in title:
-                parts = title.rsplit(' - ', 1)
-                title = parts[0]
-                source = parts[1] if len(parts) > 1 else ''
+            elif hasattr(entry, 'author'):
+                source = entry.author
 
-            # 优先解析真实来源 URL + 抓取正文
-            raw_link = entry.link if hasattr(entry, 'link') else ''
-            article_content = None
-            if raw_link and 'news.google.com' in raw_link:
-                link, article_content = resolve_google_news_link(raw_link)
-            elif source_url and source_url.startswith('http'):
-                link = source_url
-            else:
-                link = raw_link
-
-            # 清理摘要
+            # 摘要
             summary = ''
             if hasattr(entry, 'summary'):
-                summary = re.sub(r'<[^>]+>', '', entry.summary)
-                summary = summary.strip()
+                summary = re.sub(r'<[^>]+>', '', entry.summary).strip()
 
-            # 解析日期
+            # 日期
             published = entry.published if hasattr(entry, 'published') else ''
             published_parsed = entry.published_parsed if hasattr(entry, 'published_parsed') and entry.published_parsed else None
 
@@ -198,13 +107,13 @@ def fetch_rss(query):
                 'source': source.strip(),
                 'link': link,
                 'summary': summary,
-                'content': article_content,
+                'content': None,
                 'published': published,
                 'published_parsed': published_parsed,
             })
         return articles
     except Exception as e:
-        print(f"  RSS 获取失败 [{query}]: {e}")
+        print(f"  Bing RSS 获取失败 [{query}]: {e}")
         return []
 
 
@@ -304,33 +213,20 @@ def select_news(articles, count=6):
 
 
 def fetch_policies():
-    """获取政策法规"""
-    url = "https://news.google.com/rss/search?q=%E6%8E%92%E6%94%BE%E6%A0%87%E5%87%86+OR+%E6%B1%A1%E6%9F%93%E9%98%B2%E6%B2%BB+OR+%E7%94%9F%E6%80%81%E7%8E%AF%E5%A2%83%E9%83%A8+OR+%E6%B0%B4%E6%B1%A1%E6%9F%93%E9%98%B2%E6%B2%BB&hl=zh-CN&gl=CN&ceid=CN:zh"
+    """获取政策法规 — 使用 Bing News RSS"""
+    encoded_q = urllib.parse.quote('排放标准 OR 污染防治 OR 生态环境部 OR 水污染防治')
+    url = f"https://www.bing.com/news/search?q={encoded_q}&format=rss&setlang=zh-Hans"
     try:
         feed = feedparser.parse(url)
         policies = []
         for entry in feed.entries[:10]:
-            title = entry.title
+            title = entry.title if hasattr(entry, 'title') else ''
+            link = entry.link if hasattr(entry, 'link') else ''
             source = ''
-            source_url = ''
             if hasattr(entry, 'source') and hasattr(entry.source, 'title'):
                 source = entry.source.title
-                if hasattr(entry.source, 'href'):
-                    source_url = entry.source.href
-            elif ' - ' in title:
-                parts = title.rsplit(' - ', 1)
-                title = parts[0]
-                source = parts[1] if len(parts) > 1 else ''
-
-            # 优先解析真实来源 URL + 抓取正文
-            raw_link = entry.link if hasattr(entry, 'link') else ''
-            policy_content = None
-            if raw_link and 'news.google.com' in raw_link:
-                link, policy_content = resolve_google_news_link(raw_link)
-            elif source_url and source_url.startswith('http'):
-                link = source_url
-            else:
-                link = raw_link
+            elif hasattr(entry, 'author'):
+                source = entry.author
 
             # 判断状态
             text = title.lower()
