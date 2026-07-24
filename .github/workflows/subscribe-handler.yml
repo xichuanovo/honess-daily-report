@@ -85,12 +85,27 @@ jobs:
           git diff --cached --quiet || git commit -m "chore: add subscriber ${{ steps.update.outputs.email }} [skip ci]"
           git push
 
+      - name: Install dependencies for immediate report
+        if: steps.update.outputs.already == 'false'
+        run: pip install -r scripts/requirements.txt
+
+      - name: Send today's daily report to new subscriber
+        if: steps.update.outputs.already == 'false'
+        run: python scripts/main.py
+        env:
+          IMMEDIATE_RECIPIENTS: ${{ steps.update.outputs.email }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_FROM_NAME: ${{ secrets.SMTP_FROM_NAME }}
+
       - name: Close issue with comment
         run: |
           if [ "${{ steps.update.outputs.already }}" = "true" ]; then
-            body="邮箱 **${{ steps.update.outputs.email }}** 已经在订阅列表中，无需重复订阅。\\n\\n本 issue 已自动关闭。"
+            body="邮箱 **${{ steps.update.outputs.email }}** 已经在订阅列表中，无需重复订阅。\n\n本 issue 已自动关闭。"
           else
-            body="✅ 已自动将 **${{ steps.update.outputs.email }}** 加入日报订阅列表。\\n\\n从明天早上 8:00（北京时间）开始，该邮箱将自动收到泓济环保行业日报。\\n\\n如需退订，请回复邮件「退订」或联系管理员。\\n\\n本 issue 已自动关闭。"
+            body="✅ 已自动将 **${{ steps.update.outputs.email }}** 加入日报订阅列表。\n\n今天的日报已立即发送到你的邮箱，请查收。\n\n从明天早上 8:00（北京时间）开始，你的邮箱将每天自动收到泓济环保行业日报。\n\n如需退订，请回复邮件「退订」或联系管理员。\n\n本 issue 已自动关闭。"
           fi
           gh issue comment "${{ github.event.issue.number }}" --body "$body"
           gh issue close "${{ github.event.issue.number }}"
