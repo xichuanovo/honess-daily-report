@@ -87,39 +87,12 @@ jobs:
 
       - name: Close issue with comment
         run: |
-          python << 'PYEOF'
-          import requests, os, json
-
-          token = os.environ['GITHUB_TOKEN']
-          repo = os.environ['GITHUB_REPOSITORY']
-          issue_number = os.environ['ISSUE_NUMBER']
-          email = os.environ.get('EMAIL', '')
-          already = os.environ.get('ALREADY', 'false') == 'true'
-
-          headers = {
-              'Authorization': f'Bearer {token}',
-              'Accept': 'application/vnd.github+json',
-              'X-GitHub-Api-Version': '2022-11-28'
-          }
-
-          if already:
-              body = f'邮箱 **{email}** 已经在订阅列表中，无需重复订阅。\\n\\n本 issue 已自动关闭。'
-          else:
-              body = f'✅ 已自动将 **{email}** 加入日报订阅列表。\\n\\n从明天早上 8:00（北京时间）开始，该邮箱将自动收到泓济环保行业日报。\\n\\n如需退订，请回复邮件「退订」或联系管理员。\\n\\n本 issue 已自动关闭。'
-
-          # Add comment
-          comment_url = f'https://api.github.com/repos/{repo}/issues/{issue_number}/comments'
-          r = requests.post(comment_url, headers=headers, json={'body': body})
-          print(f'Comment status: {r.status_code}')
-
-          # Close issue
-          close_url = f'https://api.github.com/repos/{repo}/issues/{issue_number}'
-          r = requests.patch(close_url, headers=headers, json={'state': 'closed'})
-          print(f'Close status: {r.status_code}')
-          PYEOF
+          if [ "${{ steps.update.outputs.already }}" = "true" ]; then
+            body="邮箱 **${{ steps.update.outputs.email }}** 已经在订阅列表中，无需重复订阅。\\n\\n本 issue 已自动关闭。"
+          else
+            body="✅ 已自动将 **${{ steps.update.outputs.email }}** 加入日报订阅列表。\\n\\n从明天早上 8:00（北京时间）开始，该邮箱将自动收到泓济环保行业日报。\\n\\n如需退订，请回复邮件「退订」或联系管理员。\\n\\n本 issue 已自动关闭。"
+          fi
+          gh issue comment "${{ github.event.issue.number }}" --body "$body"
+          gh issue close "${{ github.event.issue.number }}"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          EMAIL: ${{ steps.update.outputs.email }}
-          ALREADY: ${{ steps.update.outputs.already }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
