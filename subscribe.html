@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>订阅泓济环保行业日报</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#e8e4d8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;color:#1a1a1a;line-height:1.7;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:680px;margin:0 auto;padding:20px 16px 60px;}
+.paper{background:#f5f1e8;padding:40px 36px;box-shadow:0 4px 30px rgba(0,0,0,0.1);border-radius:2px;}
+.masthead{text-align:center;border-bottom:3px double #1a1a1a;padding-bottom:16px;margin-bottom:0;}
+.mast-top{display:flex;justify-content:space-between;font-size:12px;color:#555;margin-bottom:10px;font-family:Georgia,serif;font-weight:600;}
+.mast-title{font-size:36px;font-weight:800;letter-spacing:5px;font-family:Georgia,'Noto Serif SC','Songti SC','SimSun',serif;color:#0d0d0d;line-height:1.2;}
+.mast-title .en{font-size:11px;font-weight:500;letter-spacing:3px;color:#666;display:block;margin-top:6px;font-family:Georgia,serif;}
+.mast-sub{font-size:14px;color:#444;font-style:italic;margin-top:8px;font-weight:500;}
+.mast-rule{border-top:2px solid #1a1a1a;margin-top:12px;}
+.mast-rule-thin{border-top:1px solid #bbb;margin-top:4px;}
+.hero{text-align:center;padding:40px 0 30px;border-bottom:1px solid #999;margin-bottom:28px;}
+.hero h1{font-size:26px;font-weight:800;line-height:1.4;margin-bottom:12px;color:#0d0d0d;}
+.hero p{font-size:15px;color:#444;line-height:1.8;max-width:480px;margin:0 auto;}
+.hero .tag{display:inline-block;font-size:12px;color:#1565c0;border:1px solid #1565c0;padding:3px 12px;border-radius:2px;margin-bottom:14px;font-weight:600;}
+/* Features */
+.features{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:32px;}
+.feat-card{background:#fff;padding:18px 16px;border:1px solid #ddd;border-radius:4px;}
+.feat-icon{font-size:24px;margin-bottom:8px;}
+.feat-card h3{font-size:15px;font-weight:800;margin-bottom:6px;color:#0d0d0d;}
+.feat-card p{font-size:13px;color:#555;line-height:1.6;}
+/* Form */
+.form-section{background:#1a2e1a;padding:32px 28px;border-radius:4px;margin-bottom:32px;text-align:center;}
+.form-section h2{font-size:20px;color:#f5f1e8;font-weight:800;margin-bottom:8px;}
+.form-section .sub{font-size:13px;color:rgba(245,241,232,0.7);margin-bottom:20px;}
+.form-row{display:flex;gap:10px;max-width:420px;margin:0 auto;}
+.form-row input{flex:1;padding:12px 16px;border:none;border-radius:3px;font-size:15px;font-family:inherit;background:#fff;color:#1a1a1a;}
+.form-row input:focus{outline:2px solid #4a9b6a;}
+.form-row input::placeholder{color:#aaa;}
+.form-row button{padding:12px 24px;border:none;border-radius:3px;background:#4a9b6a;color:#fff;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;transition:background 0.2s;}
+.form-row button:hover{background:#3a8b5a;}
+.form-row button:disabled{background:#555;cursor:not-allowed;}
+.form-hint{font-size:12px;color:rgba(245,241,232,0.5);margin-top:12px;}
+/* Success */
+.success-msg{display:none;background:#e8f5e9;border:1px solid #4caf50;border-radius:4px;padding:16px 20px;text-align:center;margin-bottom:20px;}
+.success-msg.show{display:block;}
+.success-msg h3{font-size:16px;color:#2e7d32;font-weight:800;margin-bottom:4px;}
+.success-msg p{font-size:13px;color:#555;}
+/* Preview */
+.preview-label{font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#777;text-align:center;font-family:Georgia,serif;font-weight:700;margin-bottom:14px;}
+.preview{border:2px solid #1a1a1a;border-radius:2px;overflow:hidden;margin-bottom:32px;box-shadow:0 4px 20px rgba(0,0,0,0.08);}
+.preview-head{background:#f5f1e8;padding:16px 20px;border-bottom:3px double #1a1a1a;text-align:center;}
+.preview-head .pt{font-size:18px;font-weight:800;letter-spacing:3px;font-family:Georgia,'Noto Serif SC',serif;color:#0d0d0d;}
+.preview-head .ps{font-size:11px;color:#666;margin-top:4px;font-style:italic;}
+.preview-body{background:#fff;padding:16px 20px;}
+.preview-feature{border-bottom:1px solid #eee;padding-bottom:12px;margin-bottom:12px;}
+.preview-feature .pk{font-size:10px;color:#b71c1c;font-weight:800;text-transform:uppercase;letter-spacing:1px;}
+.preview-feature h4{font-size:15px;font-weight:800;line-height:1.4;margin:4px 0;}
+.preview-feature p{font-size:12px;color:#555;line-height:1.6;}
+.preview-items{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.preview-item{padding:8px 0;border-bottom:1px dotted #eee;}
+.preview-item .it{font-size:12px;font-weight:700;line-height:1.4;color:#0d0d0d;}
+.preview-item .im{font-size:10px;color:#888;margin-top:2px;text-transform:uppercase;letter-spacing:0.5px;}
+.preview-item .ip{font-size:11px;color:#555;line-height:1.5;margin-top:3px;}
+/* FAQ */
+.faq{margin-bottom:32px;}
+.faq h2{font-size:16px;font-weight:800;letter-spacing:2px;border-top:2px solid #1a1a1a;border-bottom:1px solid #1a1a1a;padding:6px 0;text-align:center;margin-bottom:16px;font-family:Georgia,serif;}
+.faq-item{padding:10px 0;border-bottom:1px dotted #ccc;}
+.faq-item:last-child{border-bottom:none;}
+.faq-item .q{font-size:14px;font-weight:700;color:#0d0d0d;margin-bottom:4px;}
+.faq-item .a{font-size:13px;color:#555;line-height:1.7;}
+/* Footer */
+.footer{text-align:center;padding-top:20px;border-top:1px solid #999;}
+.footer .fn{font-size:14px;font-weight:800;letter-spacing:2px;color:#0d0d0d;font-family:Georgia,serif;}
+.footer p{font-size:12px;color:#888;margin-top:4px;}
+.footer .links{margin-top:12px;display:flex;justify-content:center;gap:20px;}
+.footer .links a{font-size:12px;color:#555;text-decoration:none;font-weight:600;border-bottom:1px solid transparent;}
+.footer .links a:hover{border-bottom-color:#555;}
+/* Responsive */
+@media(max-width:600px){
+  .paper{padding:28px 20px;}
+  .mast-title{font-size:28px;letter-spacing:3px;}
+  .hero h1{font-size:21px;}
+  .hero p{font-size:14px;}
+  .features{grid-template-columns:1fr;}
+  .preview-items{grid-template-columns:1fr;}
+  .form-row{flex-direction:column;}
+  .form-row button{width:100%;}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="paper">
+  <!-- Masthead -->
+  <div class="masthead">
+    <div class="mast-top">
+      <div class="left">订阅中心</div>
+      <div class="right">HONESS ENVIRONMENTAL</div>
+    </div>
+    <div class="mast-title">泓济行业日报<span class="en">HONESS ENVIRONMENTAL DAILY</span></div>
+    <div class="mast-sub">专注水处理 · 服务环保人</div>
+    <div class="mast-rule"></div>
+    <div class="mast-rule-thin"></div>
+  </div>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="tag">每日 08:00 自动推送</div>
+    <h1>每天一杯咖啡的时间，读懂环保水处理行业</h1>
+    <p>聚焦政策法规、技术突破、市场动态，覆盖工业废水、市政污水、MBR、MVR蒸发、零排放等泓济核心业务方向。每天5分钟，行业动态尽在掌握。</p>
+  </div>
+
+  <!-- Features -->
+  <div class="features">
+    <div class="feat-card">
+      <div class="feat-icon">📋</div>
+      <h3>政策法规追踪</h3>
+      <p>排放标准、管理办法、行动方案——新法规第一时间推送，附官方链接</p>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">🔬</div>
+      <h3>技术创新精选</h3>
+      <p>MBR膜技术、MVR蒸发、零排放工艺等前沿突破，每条都有深度摘要</p>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">📈</div>
+      <h3>市场动态速递</h3>
+      <p>项目中标、企业业绩、行业并购——把握市场脉搏，洞察行业趋势</p>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon">📰</div>
+      <h3>报纸排版风格</h3>
+      <p>头版头条+双栏新闻+政策追踪器，告别枯燥列表，阅读体验更佳</p>
+    </div>
+  </div>
+
+  <!-- Subscription Form -->
+  <div id="successMsg" class="success-msg">
+    <h3>✅ 请完成最后一步确认</h3>
+    <p>已为你打开 GitHub 订阅确认页，点击页面上的「创建 issue」即可自动完成订阅。<br>明天早上 8 点起开始收到日报。</p>
+  </div>
+
+  <div class="form-section">
+    <h2>立即订阅</h2>
+    <p class="sub">填写邮箱，每天自动推送 · 随时可退订</p>
+    <form id="subForm" class="form-row">
+      <input type="email" name="email" id="emailInput" placeholder="输入你的邮箱地址" required>
+      <button type="submit" id="subBtn">订阅日报</button>
+    </form>
+    <p class="form-hint">已有 2 位同事订阅 · chenxingyu@honess.cn · huangy@honess.cn · <a id="emailSubLink" href="javascript:void(0)" style="color:#4a9b6a;text-decoration:none;border-bottom:1px dashed #4a9b6a;">或邮件订阅</a></p>
+  </div>
+
+  <!-- Preview -->
+  <div class="preview-label">— 日报样稿预览 —</div>
+  <div class="preview">
+    <div class="preview-head">
+      <div class="pt">泓济行业日报</div>
+      <div class="ps">HONESS ENVIRONMENTAL DAILY · 第 047 期</div>
+    </div>
+    <div class="preview-body">
+      <div class="preview-feature">
+        <div class="pk">★ 头版头条</div>
+        <h4>国务院发布《群众身边水体保护治理行动方案》</h4>
+        <p>聚焦群众身边突出水环境问题，明确黑臭水体治理、饮用水源保护、入河排污口整治等重点任务，对市政污水处理及管网建设提出更高要求。</p>
+      </div>
+      <div class="preview-items">
+        <div class="preview-item">
+          <div class="it">中煤靖远发电实现脱硫废水零排放</div>
+          <div class="im">技术 · 新白银</div>
+          <div class="ip">创新"低温闪蒸+高温烟气干燥"组合工艺，实现脱硫废水完全蒸发固化。</div>
+        </div>
+        <div class="preview-item">
+          <div class="it">光大水务发行15亿中期票据</div>
+          <div class="im">市场 · 新浪财经</div>
+          <div class="ip">利率1.80%，反映资本市场对水务运营企业信用的高度认可。</div>
+        </div>
+        <div class="preview-item">
+          <div class="it">联合水务中标沙特3.44亿项目</div>
+          <div class="im">市场 · 北极星环保网</div>
+          <div class="ip">中国水务企业出海运营再下一城，市政污水运维市场扩展。</div>
+        </div>
+        <div class="preview-item">
+          <div class="it">碧水源技术获国家技术发明奖</div>
+          <div class="im">技术 · 同花顺财经</div>
+          <div class="ip">"微场驱动少药-短程水处理技术"获国家级奖项认可。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FAQ -->
+  <div class="faq">
+    <h2>常见问题</h2>
+    <div class="faq-item">
+      <div class="q">如何订阅？</div>
+      <div class="a">在上方输入邮箱，点击「订阅日报」后，按提示在 GitHub 页面点击「创建 issue」即可自动完成订阅。如果你无法访问 GitHub，也可以点「或邮件订阅」发送邮件。</div>
+    </div>
+    <div class="faq-item">
+      <div class="q">日报什么时候发送？</div>
+      <div class="a">每天早上 8:00 自动发送，到你公司时就能看到。</div>
+    </div>
+    <div class="faq-item">
+      <div class="q">内容来源是什么？</div>
+      <div class="a">自动抓取生态环境部、北极星环保网、中国环境报、新浪财经等数十家权威媒体的最新报道，经AI筛选去重后推送。邮件中的新闻链接均直接指向原文出处，无需 VPN。</div>
+    </div>
+    <div class="faq-item">
+      <div class="q">邮件格式是什么样的？</div>
+      <div class="a">报纸排版风格的 HTML 邮件，包含头版头条、双栏新闻、政策法规追踪、关键词等板块，在电脑和手机上都能清晰阅读。</div>
+    </div>
+    <div class="faq-item">
+      <div class="q">如何退订？</div>
+      <div class="a">回复邮件"退订"即可，或联系 chenxingyu@honess.cn 移除你的邮箱。</div>
+    </div>
+    <div class="faq-item">
+      <div class="q">会泄露我的邮箱吗？</div>
+      <div class="a">不会。邮箱地址仅用于发送日报，不会分享给任何第三方。</div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="fn">HONESS ENVIRONMENTAL</div>
+    <p>本日报由泓济环保行业日报系统自动生成 · Powered by GitHub Actions</p>
+    <div class="links">
+      <a href="javascript:void(0)">往期日报</a>
+      <a href="javascript:void(0)">反馈建议</a>
+      <a href="javascript:void(0)">退订</a>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+// 订阅方式：通过 GitHub Issue 自动提交邮箱
+// 用户填写邮箱 → 跳转 GitHub Issue 创建页（标题已预填） → 点击"创建 issue" →
+// GitHub Actions 自动解析邮箱并写入 subscribers.json → 次日开始收到日报
+var REPO = 'xichuanovo/honess-daily-report';
+
+document.getElementById('subForm').addEventListener('submit', function(e){
+  e.preventDefault();
+  var email = document.getElementById('emailInput').value.trim();
+  if(!email || email.indexOf('@') === -1){ alert('请输入有效的邮箱地址'); return; }
+
+  var btn = document.getElementById('subBtn');
+  btn.disabled = true;
+  btn.textContent = '跳转中...';
+
+  var title = '订阅日报：' + email;
+  var body = '**订阅邮箱：** ' + email + '\n\n' +
+             '**来源：** 泓济环保日报订阅页面\n\n' +
+             '**订阅时间：** ' + new Date().toLocaleString('zh-CN') + '\n\n' +
+             '---\n由 GitHub Actions 自动处理，请勿手动修改标题格式。';
+  var issueUrl = 'https://github.com/' + REPO + '/issues/new?title=' + encodeURIComponent(title) + '&body=' + encodeURIComponent(body);
+
+  // 打开 Issue 创建页
+  window.open(issueUrl, '_blank');
+
+  // 显示本地提示
+  document.getElementById('successMsg').classList.add('show');
+  document.getElementById('subForm').style.display = 'none';
+  btn.disabled = false;
+  btn.textContent = '订阅日报';
+});
+
+// 备选：邮件订阅
+document.getElementById('emailSubLink').addEventListener('click', function(e){
+  e.preventDefault();
+  var email = document.getElementById('emailInput').value.trim();
+  if(!email || email.indexOf('@') === -1){ alert('请先输入有效的邮箱地址'); return; }
+  var subject = '订阅泓济环保日报：' + email;
+  var body = '请将此邮箱加入日报订阅列表：' + email;
+  window.location.href = 'mailto:chenxingyu@honess.cn?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+});
+</script>
+</body>
+</html>
