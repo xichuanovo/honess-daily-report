@@ -58,23 +58,16 @@ def resolve_google_news_link(url):
     if not url or 'news.google.com' not in url:
         return url
     try:
-        req = urllib.request.Request(
-            url,
-            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'},
-            method='HEAD'
-        )
-        # 允许重定向
-        opener = urllib.request.build_opener(
-            urllib.request.HTTPRedirectHandler(),
-            urllib.request.HTTPSRedirectHandler()
-        )
-        with opener.open(req, timeout=10) as resp:
-            final = resp.geturl()
-            # 过滤掉仍然指向 google 的中间页
-            if final and 'google.com' not in final:
-                return final
-            # 尝试从响应头 Location 再取（HTTPRedirectHandler 已处理）
-            return final if final else url
+        from googlenewsdecoder import decoderv2, decoderv1
+        # v2 会调用 Google 内部接口，在 GitHub Actions 海外节点通常可用
+        decoded = decoderv2(url)
+        if decoded and decoded.startswith('http'):
+            return decoded
+        # v2 失败时尝试本地 v1 解码
+        decoded = decoderv1(url)
+        if decoded and decoded.startswith('http'):
+            return decoded
+        return url
     except Exception as e:
         print(f"    链接解析失败: {e}")
         return url
