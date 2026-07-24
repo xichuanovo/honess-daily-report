@@ -205,12 +205,18 @@ def fetch_policies():
         for entry in feed.entries[:10]:
             title = entry.title
             source = ''
+            source_url = ''
             if hasattr(entry, 'source') and hasattr(entry.source, 'title'):
                 source = entry.source.title
+                if hasattr(entry.source, 'href'):
+                    source_url = entry.source.href
             elif ' - ' in title:
                 parts = title.rsplit(' - ', 1)
                 title = parts[0]
                 source = parts[1] if len(parts) > 1 else ''
+
+            # 优先使用真实来源 URL，避免被墙
+            link = source_url if source_url else (entry.link if hasattr(entry, 'link') else '')
 
             # 判断状态
             text = title.lower()
@@ -230,7 +236,7 @@ def fetch_policies():
 
             policies.append({
                 'title': title.strip(),
-                'link': entry.link if hasattr(entry, 'link') else '',
+                'link': link,
                 'source': source.strip(),
                 'date': date_display,
                 'status': status,
@@ -336,6 +342,66 @@ def generate_html(news, policies):
     return html
 
 
+def save_news_json(news, policies):
+    """生成与招聘工具页同格式的新闻数据 JSON"""
+    now = datetime.utcnow() + timedelta(hours=8)
+
+    news_items = []
+    for n in news:
+        pp = n.get('published_parsed')
+        time_str = ''
+        if pp:
+            try:
+                time_str = datetime(*pp[:6]).strftime('%m-%d')
+            except Exception:
+                pass
+        if not time_str:
+            time_str = now.strftime('%m-%d')
+        news_items.append({
+            'title': n.get('title', ''),
+            'source': n.get('source', ''),
+            'time': time_str,
+            'tag': n.get('tag', '市场'),
+            'url': n.get('link', ''),
+        })
+
+    law_items = []
+    for p in policies:
+        # 把 MM-DD 补成年份（取最近7天内且不超过当天）
+        raw_date = p.get('date', '')
+        date_str = ''
+        if raw_date and len(raw_date) >= 5:
+            try:
+                md = datetime.strptime(raw_date, '%m-%d')
+                year = now.year
+                candidate = md.replace(year=year)
+                if candidate > now:
+                    candidate = candidate.replace(year=year - 1)
+                date_str = candidate.strftime('%Y-%m-%d')
+            except Exception:
+                date_str = now.strftime('%Y-%m-%d')
+        if not date_str:
+            date_str = now.strftime('%Y-%m-%d')
+
+        law_items.append({
+            'title': p.get('title', ''),
+            'date': date_str,
+            'status': p.get('status', '新发布'),
+            'url': p.get('link', ''),
+        })
+
+    data = {
+        'updated': now.strftime('%Y-%m-%d %H:%M'),
+        'hash': now.strftime('%Y%m%d') + '-v1',
+        'news': news_items,
+        'laws': law_items,
+    }
+
+    with open('news-data.json', 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    print("  已保存: news-data.json")
+
+
 # ==================== 邮件发送 ====================
 
 def send_emails(html, subscribers):
@@ -381,7 +447,7 @@ def main():
     print("=" * 50)
 
     # 1. 抓取新闻
-    print("\n[1/5] 抓取新闻...")
+    print("\n[1/6] 抓取新闻...")
     articles = fetch_all_news()
     print(f"  总计: {len(articles)} 篇")
 
@@ -398,12 +464,12 @@ def main():
     print(f"  选中: {len(news)} 条")
 
     # 2. 抓取政策法规
-    print("\n[2/5] 抓取政策法规...")
+    print("\n[2/6] 抓取政策法规...")
     policies = fetch_policies()
     print(f"  获取: {len(policies)} 条")
 
     # 3. 生成 HTML
-    print("\n[3/5] 生成日报HTML...")
+    print("\n[3/6] 生成日报HTML...")
     html = generate_html(news, policies)
     print(f"  HTML 长度: {len(html)} 字符")
 
@@ -412,8 +478,11 @@ def main():
         f.write(html)
     print("  已保存: daily-report.html")
 
-    # 4. 读取订阅者
-    print("\n[4/5] 读取订阅者...")
+    # 4. 保存新闻数据 JSON（供招聘工具页同步使用）
+    save_news_json(news, policies)
+
+    # 5. 读取订阅者
+    print("\n[5/6] 读取订阅者...")
     subs_path = os.path.join(os.path.dirname(__file__), '..', 'subscribers.json')
     with open(subs_path, 'r', encoding='utf-8') as f:
         subscribers = json.load(f)['emails']
@@ -426,8 +495,8 @@ def main():
     else:
         print(f"  订阅者: {len(subscribers)} 人")
 
-    # 5. 发送邮件
-    print("\n[5/5] 发送邮件...")
+    # 6. 发送邮件
+    print("\n[6/6] 发送邮件...")
     results = send_emails(html, subscribers)
 
     # 汇总

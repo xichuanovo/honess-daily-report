@@ -9,6 +9,8 @@ on:
 jobs:
   daily-report:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -29,3 +31,11 @@ jobs:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           SMTP_FROM_NAME: ${{ secrets.SMTP_FROM_NAME }}
+
+      - name: 提交新闻数据到仓库
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add news-data.json
+          git diff --cached --quiet || git commit -m "chore: update daily news data [skip ci]"
+          git push
