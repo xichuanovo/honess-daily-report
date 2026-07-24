@@ -24,12 +24,12 @@ from trafilatura import extract as traf_extract
 
 # 搜索关键词（每个关键词对应一次 Google News RSS 查询）
 SEARCH_QUERIES = [
-    "环保政策 水处理",
-    "污水处理 技术 创新",
-    "工业废水 零排放 MBR MVR",
-    "排放标准 生态环境部 法规",
-    "水务 中标 项目 市场",
-    "环保行业 业绩 并购",
+    "污水处理",
+    "环保 水处理",
+    "工业废水 零排放",
+    "水务 中标 项目",
+    "排放标准 生态环境部",
+    "水污染防治",
 ]
 
 # 相关性过滤关键词（标题或摘要中包含才算相关）
@@ -50,7 +50,7 @@ NEWS_COUNT = 6
 # 政策法规条数
 POLICY_COUNT = 5
 # 最近N天的新闻
-RECENT_DAYS = 7
+RECENT_DAYS = 14
 
 
 # ==================== 新闻抓取 ====================
@@ -67,7 +67,8 @@ def fetch_page_content(url):
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
         resp = req_lib.get(url, timeout=15, headers=headers, allow_redirects=True)
-        content = traf_extract(resp.text, include_comments=False, include_tables=False)
+        # 传入原始字节让 trafilatura 自动检测编码（解决 GBK/GB2312 乱码问题）
+        content = traf_extract(resp.content, include_comments=False, include_tables=False)
         return resp.url, content
     except Exception as e:
         print(f"    [fetch] 失败: {e}")
@@ -78,7 +79,7 @@ def fetch_rss(query):
     """从 Bing News RSS 获取新闻，返回带真实链接的文章列表"""
     encoded_query = urllib.parse.quote(query)
     # Bing News RSS — 直接提供原始文章链接，国内可访问
-    url = f"https://www.bing.com/news/search?q={encoded_query}&format=rss&setlang=zh-Hans"
+    url = f"https://www.bing.com/news/search?q={encoded_query}&format=rss"
     try:
         feed = feedparser.parse(url)
         articles = []
@@ -151,8 +152,8 @@ def filter_relevant(articles):
     return relevant
 
 
-def filter_recent(articles, days=7):
-    """过滤最近N天的新闻"""
+def filter_recent(articles, days=14):
+    """过滤最近N天的新闻（无日期的保留）"""
     cutoff = datetime.utcnow() - timedelta(days=days)
     recent = []
     for a in articles:
@@ -162,9 +163,9 @@ def filter_recent(articles, days=7):
                 if dt >= cutoff:
                     recent.append(a)
             except:
-                recent.append(a)
+                recent.append(a)  # 日期解析失败也保留
         else:
-            recent.append(a)
+            recent.append(a)  # 无日期信息也保留
     return recent
 
 
@@ -214,8 +215,8 @@ def select_news(articles, count=6):
 
 def fetch_policies():
     """获取政策法规 — 使用 Bing News RSS"""
-    encoded_q = urllib.parse.quote('排放标准 OR 污染防治 OR 生态环境部 OR 水污染防治')
-    url = f"https://www.bing.com/news/search?q={encoded_q}&format=rss&setlang=zh-Hans"
+    encoded_q = urllib.parse.quote('排放标准 污染防治')
+    url = f"https://www.bing.com/news/search?q={encoded_q}&format=rss"
     try:
         feed = feedparser.parse(url)
         policies = []
