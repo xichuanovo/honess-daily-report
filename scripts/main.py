@@ -61,47 +61,80 @@ def is_google_news_link(url):
 
 
 def resolve_google_news_link(url):
-    """解析 Google News 重定向链接，返回真实文章来源 URL。
+    """解析 Google News 重定向链接，返回 (真实URL, 正文内容)。
     
-    依次尝试三种方式：
-    1. googlenewsdecoder 库（调用 Google 内部 API）
-    2. HTTP 重定向跟随（requests 自动跟随 302 跳转）
-    3. 返回原始 Google News 链接作为最后兜底
+    依次独立尝试多种方式，任一成功即返回：
+    1. googlenewsdecoder v2（调用 Google 内部 API）
+    2. googlenewsdecoder v1（本地 protobuf 解码）
+    3. HTTP 请求 Google News 页面 + HTML 解析提取真实 URL
     """
     if not url or 'news.google.com' not in url:
         return url, None
 
-    # 方式1: googlenewsdecoder
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+
+    # 方式1: googlenewsdecoder v2
     try:
-        from googlenewsdecoder import decoderv2, decoderv1
+        from googlenewsdecoder import decoderv2
         decoded = decoderv2(url)
         if decoded and decoded.startswith('http') and 'news.google.com' not in decoded:
-            print(f"    [decoder v2] -> {decoded[:80]}")
-            real_url, content = fetch_page_content(decoded)
-            return real_url, content
+            print(f"    [v2] -> {decoded[:80]}")
+            return fetch_page_content(decoded)
+    except Exception as e:
+        print(f"    [v2] 失败: {e}")
+
+    # 方式2: googlenewsdecoder v1（本地解码，不依赖网络）
+    try:
+        from googlenewsdecoder import decoderv1
         decoded = decoderv1(url)
         if decoded and decoded.startswith('http') and 'news.google.com' not in decoded:
-            print(f"    [decoder v1] -> {decoded[:80]}")
-            real_url, content = fetch_page_content(decoded)
-            return real_url, content
+            print(f"    [v1] -> {decoded[:80]}")
+            return fetch_page_content(decoded)
     except Exception as e:
-        print(f"    [decoder] 失败: {e}")
+        print(f"    [v1] 失败: {e}")
 
-    # 方式2: HTTP 重定向跟随
+    # 方式3: 直接 HTTP 请求 Google News 页面，从 HTML 中提取真实 URL
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
         resp = req_lib.get(url, timeout=15, allow_redirects=True, headers=headers)
+        html = resp.text
         final_url = resp.url
+
+        # 3a: 如果 HTTP 重定向已跳转到真实页面
         if final_url and 'news.google.com' not in final_url:
             print(f"    [redirect] -> {final_url[:80]}")
-            content = traf_extract(resp.text, include_comments=False, include_tables=False)
+            content = traf_extract(html, include_comments=False, include_tables=False)
             return final_url, content
-    except Exception as e:
-        print(f"    [redirect] 失败: {e}")
 
-    # 方式3: 兜底，返回原始链接和 None
+        # 3b: 从 HTML 中正则提取真实 URL
+        # 模式: data-n-au="https://..."
+        match = re.search(r'data-n-au="(https?://[^"]+)"', html)
+        if match:
+            real_url = match.group(1).replace('\\u003d', '=').replace('\\/', '/')
+            if 'news.google.com' not in real_url:
+                print(f"    [data-n-au] -> {real_url[:80]}")
+                return fetch_page_content(real_url)
+
+        # 模式: "https://..." 在 JSON 数据中（排除 google 自身域名）
+        for m in re.finditer(r'"(https?://(?:www\.)?(?!news\.google)[^"]+)"', html):
+            real_url = m.group(1)
+            if 'google.com' not in real_url and 'gstatic' not in real_url and 'googleapis' not in real_url:
+                print(f"    [html-regex] -> {real_url[:80]}")
+                return fetch_page_content(real_url)
+
+        # 模式: meta refresh 重定向
+        match = re.search(r'<meta[^>]+refresh[^>]+url=(https?://[^"\'>\s]+)', html, re.IGNORECASE)
+        if match:
+            real_url = match.group(1)
+            if 'news.google.com' not in real_url:
+                print(f"    [meta-refresh] -> {real_url[:80]}")
+                return fetch_page_content(real_url)
+
+        print(f"    [html-parse] 未在页面中找到真实URL")
+    except Exception as e:
+        print(f"    [http-fetch] 失败: {e}")
+
     return url, None
 
 
