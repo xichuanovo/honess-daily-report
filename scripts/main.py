@@ -45,6 +45,10 @@ RELEVANT_KEYWORDS = [
     '排放标准', '水务', '膜技术', '脱硫', '污泥', '再生水',
     '黑臭水体', '工业园区', '海水淡化', '饮用水', '水污染',
     '水环境', '污水处理厂', '给水', '排水',
+    # 英文关键词（新加坡等国际新闻）
+    'water', 'wastewater', 'treatment', 'desalination', 'recycling',
+    'environment', 'pollution', 'emission', 'sustainability', 'seawater',
+    'NEWater', 'PUB', 'sewerage', 'stormwater', 'reservoir',
 ]
 
 # 政策相关关键词（用于判断文章是否属于政策类）
@@ -342,6 +346,7 @@ def fetch_singapore_news():
                                 '水', '环保', '污水', '废水', '水务', '再生水']
                 if any(kw.lower() in text.lower() for kw in env_keywords):
                     a['tag'] = '市场'  # 新加坡新闻标记为市场类
+                    a['_singapore'] = True  # 标记为新加坡来源，跳过相关性过滤
                     all_articles.append(a)
         time.sleep(0.3)
         if len(all_articles) >= 5:
@@ -420,6 +425,10 @@ def filter_relevant(articles):
     """过滤相关新闻"""
     relevant = []
     for a in articles:
+        # 新加坡来源已预先过滤，直接通过
+        if a.get('_singapore'):
+            relevant.append(a)
+            continue
         text = a['title'] + ' ' + a['summary']
         if any(kw in text for kw in RELEVANT_KEYWORDS):
             relevant.append(a)
