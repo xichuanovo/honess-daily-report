@@ -22,7 +22,7 @@ from trafilatura import extract as traf_extract
 
 # ==================== 配置 ====================
 
-# 搜索关键词（每个关键词对应一次 Google News RSS 查询）
+# 搜索关键词（每个关键词对应一次 Bing News RSS 查询）
 SEARCH_QUERIES = [
     "污水处理",
     "环保 水处理",
@@ -32,6 +32,11 @@ SEARCH_QUERIES = [
     "水污染防治",
     "再生水 水务",
     "污泥处理",
+    # 备选关键词（更广覆盖，增加命中率）
+    "环保工程",
+    "水环境 治理",
+    "污水处理厂",
+    "流域 生态修复",
 ]
 
 # 相关性过滤关键词（标题或摘要中包含才算相关）
@@ -85,7 +90,7 @@ NEWS_COUNT = 6
 # 政策法规条数
 POLICY_COUNT = 5
 # 最近N天的新闻
-RECENT_DAYS = 14
+RECENT_DAYS = 21
 
 
 # ==================== 新闻抓取 ====================
@@ -186,12 +191,21 @@ def fetch_page_content(url):
 
 
 def fetch_rss(query):
-    """从 Bing News RSS 获取新闻，返回带真实链接的文章列表"""
+    """从 Bing News RSS 获取新闻，返回带真实链接的文章列表（含一次重试）"""
     encoded_query = urllib.parse.quote(query)
     # Bing News RSS — 直接提供原始文章链接，国内可访问
     url = f"https://www.bing.com/news/search?q={encoded_query}&format=rss"
+    for attempt in range(2):  # 最多尝试2次
+        try:
+            feed = feedparser.parse(url)
+            if feed.entries:
+                break
+            if attempt == 0:
+                time.sleep(1)  # 第一次为空时等1秒重试
+        except Exception:
+            if attempt == 0:
+                time.sleep(1)
     try:
-        feed = feedparser.parse(url)
         articles = []
         for entry in feed.entries:
             title = entry.title if hasattr(entry, 'title') else ''
@@ -233,6 +247,7 @@ def fetch_mee_news():
     urls = [
         'https://www.mee.gov.cn/ywdt/hjywnews/',
         'https://www.mee.gov.cn/ywdt/dfnews/',
+        'https://www.mee.gov.cn/ywdt/hjywnews/index2.shtml',  # 第2页
     ]
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -772,10 +787,10 @@ def main():
     articles = deduplicate(articles)
     print(f"  去重后: {len(articles)} 篇")
 
-    articles = filter_relevant(articles)
-    print(f"  相关: {len(articles)} 篇")
+    articles_relevant = filter_relevant(articles)
+    print(f"  相关: {len(articles_relevant)} 篇")
 
-    articles = filter_recent(articles, RECENT_DAYS)
+    articles = filter_recent(articles_relevant, RECENT_DAYS)
     print(f"  最近{RECENT_DAYS}天: {len(articles)} 篇")
 
     articles = filter_valid_links(articles)
@@ -783,6 +798,14 @@ def main():
 
     news = select_news(articles, NEWS_COUNT)
     print(f"  选中: {len(news)} 条")
+
+    # 兜底：如果新闻不足4条，放宽日期限制到30天再选一次（复用已抓取数据）
+    if len(news) < 4 and len(articles_relevant) > len(articles):
+        print(f"  新闻不足4条，放宽到30天...")
+        articles_wide = filter_recent(articles_relevant, 30)
+        articles_wide = filter_valid_links(articles_wide)
+        news = select_news(articles_wide, NEWS_COUNT)
+        print(f"  重新选中: {len(news)} 条")
 
     # 1.5 对选中新闻补充抓取原文（仅对尚未提取正文的条目）
     print("\n[1.5/6] 抓取新闻原文...")
