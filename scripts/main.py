@@ -364,7 +364,7 @@ def fetch_honess_news():
     每次发送前自动检查官网，如有新动态则加入日报"""
     url = 'https://www.honess.cn/honess-news/'
     try:
-        resp = requests.get(url, timeout=15, headers={
+        resp = req_lib.get(url, timeout=15, headers={
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         })
         resp.encoding = 'utf-8'
