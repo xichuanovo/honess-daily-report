@@ -74,12 +74,12 @@ EXCLUDE_KEYWORDS = [
     '干部大会', '主题教育', '党建', '干部培训',
 ]
 
-# 台湾省相关关键词（降低优先级，聚焦大陆新闻，含繁体字）
+# 台湾省相关关键词（直接排除，不收录台湾新闻，含繁体字）
 TAIWAN_KEYWORDS = [
     '台湾', '台北', '台南', '高雄', '新北', '桃园', '台中',
     '台啤', '台企', '台商', '台当局', '蔡英文', '赖清德',
     # 繁体字变体
-    '臺灣', '臺北', '臺南', '臺中', '臺當局',
+    '臺灣', '臺北', '臺南', '臺中', '臺當局', '臺',
 ]
 
 # 新加坡相关关键词（新加坡环保/水务新闻，最多保留1条）
@@ -426,16 +426,23 @@ def deduplicate(articles):
 
 
 def filter_relevant(articles):
-    """过滤相关新闻"""
+    """过滤相关新闻（排除台湾省新闻）"""
     relevant = []
+    taiwan_excluded = 0
     for a in articles:
         # 新加坡来源已预先过滤，直接通过
         if a.get('_singapore'):
             relevant.append(a)
             continue
         text = a['title'] + ' ' + a['summary']
+        # 排除台湾省新闻
+        if any(kw in text for kw in TAIWAN_KEYWORDS):
+            taiwan_excluded += 1
+            continue
         if any(kw in text for kw in RELEVANT_KEYWORDS):
             relevant.append(a)
+    if taiwan_excluded:
+        print(f"  排除台湾省新闻: {taiwan_excluded}条")
     return relevant
 
 
@@ -491,7 +498,6 @@ def tag_article(article):
 
 def select_news(articles, count=6):
     """选择最重要的N条新闻，保证分类多样性
-    - 台湾省新闻降低优先级（排到最后，仅在不够时补充）
     - 新加坡新闻最多保留1条
     """
     # 排序：新到旧
@@ -501,16 +507,13 @@ def select_news(articles, count=6):
     for a in articles:
         a['tag'] = tag_article(a)
 
-    # 分区：大陆新闻优先，台湾新闻降级，新加坡限1条
+    # 分区：大陆新闻优先，新加坡限1条
     mainland = []
-    taiwan = []
     singapore = []
     for a in articles:
         text = a['title'] + ' ' + a['summary']
         if any(kw in text for kw in SINGAPORE_KEYWORDS):
             singapore.append(a)
-        elif any(kw in text for kw in TAIWAN_KEYWORDS):
-            taiwan.append(a)
         else:
             mainland.append(a)
 
@@ -519,10 +522,7 @@ def select_news(articles, count=6):
     if singapore:
         print(f"  新加坡新闻: 保留1条（共{len([a for a in articles if any(kw in (a['title']+' '+a['summary']) for kw in SINGAPORE_KEYWORDS)])}条）")
 
-    if taiwan:
-        print(f"  台湾省新闻: {len(taiwan)}条降级到末尾")
-
-    # 合并：大陆 → 新加坡(1条) → 台湾(最后补充)
+    # 合并：大陆 → 新加坡(1条)
     prioritized = mainland + singapore
 
     # 按分类限制数量
@@ -538,10 +538,9 @@ def select_news(articles, count=6):
             selected.append(a)
             tag_counts[tag] = tag_counts.get(tag, 0) + 1
 
-    # 如果不够，从台湾新闻补充
-    remaining_pool = taiwan + [a for a in prioritized if a not in selected]
+    # 如果不够，从未选中的补充
     if len(selected) < count:
-        for a in remaining_pool:
+        for a in prioritized:
             if a not in selected:
                 selected.append(a)
                 if len(selected) >= count:
