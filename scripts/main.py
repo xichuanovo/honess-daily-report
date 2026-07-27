@@ -75,11 +75,39 @@ EXCLUDE_KEYWORDS = [
 ]
 
 # 台湾省相关关键词（直接排除，不收录台湾新闻，含繁体字）
+# 覆盖地名、机构、企业、人物，确保从标题/摘要/正文/URL各维度拦截
 TAIWAN_KEYWORDS = [
-    '台湾', '台北', '台南', '高雄', '新北', '桃园', '台中',
-    '台啤', '台企', '台商', '台当局', '蔡英文', '赖清德',
+    # 地名（简体）
+    '台湾', '台北', '台南', '高雄', '新北', '桃园', '台中', '台东',
+    '新竹', '基隆', '嘉义', '屏东', '花莲', '宜兰', '彰化',
+    '云林', '苗栗', '澎湖', '金门', '马祖', '日月潭',
+    '六轻',  # 台塑六轻工业区（涉水处理）
+    # 机构/企业
+    '台啤', '台企', '台商', '台当局', '台水', '台电', '台塑',
+    '台积电', '鸿海', '联电', '台达电', '环保署', '水利署',
+    '中华民国', '陆委会',
+    # 人物
+    '蔡英文', '赖清德',
     # 繁体字变体
-    '臺灣', '臺北', '臺南', '臺中', '臺當局', '臺',
+    '臺灣', '臺北', '臺南', '臺中', '臺東', '臺當局', '臺',
+    '臺塑', '臺積電', '臺電', '臺水',
+    '新竹市', '新竹縣', '嘉義市', '嘉義縣', '屏東', '花蓮',
+    '宜蘭', '彰化', '雲林', '苗栗', '澎湖', '金門', '馬祖',
+]
+
+# 台湾相关URL关键词（检查链接是否来自台湾媒体/含taiwan标识）
+TAIWAN_URL_KEYWORDS = [
+    'taiwan', '/tw/', 'taipei', 'kaohsiung',
+    'udn.com',      # 联合报
+    'chinatimes',   # 中时
+    'ltn.com',      # 自由时报
+    'cna.com.tw',   # 中央社
+    'ettoday',      # 东森
+    'storm.mg',     # 风传媒
+    'newtalk',      # 新头壳
+    'mohw.gov.tw',  # 台湾卫福部
+    'epa.gov.tw',   # 台湾环保署
+    'wra.gov.tw',   # 台湾水利署
 ]
 
 # 新加坡相关关键词（新加坡环保/水务新闻，最多保留1条）
@@ -515,8 +543,9 @@ def filter_relevant(articles):
             relevant.append(a)
             continue
         text = a['title'] + ' ' + a['summary']
-        # 排除台湾省新闻
-        if any(kw in text for kw in TAIWAN_KEYWORDS):
+        link_lower = (a.get('link') or '').lower()
+        # 排除台湾省新闻（标题+摘要+URL三重检查）
+        if any(kw in text for kw in TAIWAN_KEYWORDS) or any(kw in link_lower for kw in TAIWAN_URL_KEYWORDS):
             taiwan_excluded += 1
             continue
         if any(kw in text for kw in RELEVANT_KEYWORDS):
@@ -1024,6 +1053,63 @@ def main():
         else:
             print(f"  [{i+1}/{len(news)}] 无有效链接: {n['title'][:30]}...")
         time.sleep(0.5)
+
+    # 1.6 二次过滤：正文内容检查台湾省新闻，如有则替换
+    print("\n[1.6/6] 正文二次检查台湾省新闻...")
+    taiwan_found = []
+    safe_news = []
+    for n in news:
+        full_text = (n.get('content') or '') + ' ' + (n.get('link') or '').lower()
+        if any(kw in full_text for kw in TAIWAN_KEYWORDS) or any(kw in full_text for kw in TAIWAN_URL_KEYWORDS):
+            taiwan_found.append(n)
+        else:
+            safe_news.append(n)
+
+    if taiwan_found:
+        print(f"  发现台湾内容（正文/URL）: {len(taiwan_found)} 条，正在替换...")
+        for n in taiwan_found:
+            print(f"    移除: {n['title'][:40]}...")
+        # 从候选池补充非台湾新闻
+        selected_titles = {n['title'] for n in safe_news} | {n['title'] for n in taiwan_found}
+        need = NEWS_COUNT - len(safe_news)
+        cutoff_30 = datetime.utcnow() - timedelta(days=30)
+        for a in articles_relevant:
+            if need <= 0:
+                break
+            if a['title'] in selected_titles:
+                continue
+            # 检查标题+摘要+URL是否台湾
+            text = a['title'] + ' ' + a['summary']
+            link_lower = (a.get('link') or '').lower()
+            if any(kw in text for kw in TAIWAN_KEYWORDS) or any(kw in link_lower for kw in TAIWAN_URL_KEYWORDS):
+                continue
+            # 检查链接有效性和日期（用30天窗口）
+            if not is_valid_link(a.get('link', '')) and not a.get('content'):
+                continue
+            if a['published_parsed']:
+                try:
+                    dt = datetime(*a['published_parsed'][:6])
+                    if dt < cutoff_30:
+                        continue
+                except:
+                    pass
+            # 提取正文并再次检查
+            if not a.get('content') and a.get('link') and not is_google_news_link(a['link']):
+                real_url, content = fetch_page_content(a['link'])
+                a['link'] = real_url
+                a['content'] = clean_content(content, a.get('title', ''))
+                time.sleep(0.5)
+            if any(kw in (a.get('content') or '') for kw in TAIWAN_KEYWORDS):
+                continue
+            a['tag'] = tag_article(a)
+            safe_news.append(a)
+            selected_titles.add(a['title'])
+            need -= 1
+            print(f"    补充: {a['title'][:40]}...")
+        news = safe_news
+        print(f"  替换后: {len(news)} 条")
+    else:
+        print("  无台湾内容，跳过")
 
     # 2. 抓取政策法规
     print("\n[2/6] 抓取政策法规...")
