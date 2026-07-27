@@ -359,8 +359,73 @@ def fetch_singapore_news():
     return all_articles[:5]
 
 
+def fetch_honess_news():
+    """从泓济环保官网抓取最新新闻/公告
+    每次发送前自动检查官网，如有新动态则加入日报"""
+    url = 'https://www.honess.cn/honess-news/'
+    try:
+        resp = requests.get(url, timeout=15, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        })
+        resp.encoding = 'utf-8'
+        html = resp.text
+    except Exception as e:
+        print(f"  泓济官网抓取失败: {e}")
+        return []
+
+    articles = []
+    # 提取所有指向 /blog/ 的链接及其位置
+    link_pattern = re.compile(
+        r'<a[^>]*href="(https://(?:www\.)?honess\.cn/blog/[^"]*)"[^>]*>(.*?)</a>',
+        re.DOTALL
+    )
+    # 提取所有日期 (YYYY-MM-DD) 及其位置
+    date_pattern = re.compile(r'(20\d{2}-\d{2}-\d{2})')
+
+    links = [(m.start(), m.group(1), re.sub(r'<[^>]+>', '', m.group(2)).strip())
+             for m in link_pattern.finditer(html)]
+    dates = [(m.start(), m.group(1)) for m in date_pattern.finditer(html)]
+
+    for link_pos, link_url, title in links:
+        # 跳过非文章链接（导航、侧边栏等）
+        if not title or len(title) < 5:
+            continue
+        # 跳过"更多新闻"等导航链接
+        if '更多' in title or 'more' in title.lower():
+            continue
+
+        # 找距离链接最近的、在链接之前的日期
+        closest_date = ''
+        min_dist = float('inf')
+        for date_pos, date_str in dates:
+            dist = link_pos - date_pos
+            if 0 < dist < min_dist and dist < 800:
+                min_dist = dist
+                closest_date = date_str
+
+        pp = None
+        if closest_date:
+            try:
+                pp = datetime.strptime(closest_date, '%Y-%m-%d').timetuple()
+            except Exception:
+                pass
+
+        articles.append({
+            'title': title,
+            'source': '泓济环保',
+            'link': link_url,
+            'summary': '',
+            'content': None,
+            'published': closest_date,
+            'published_parsed': pp,
+            '_honess': True,
+        })
+
+    return articles
+
+
 def fetch_all_news():
-    """获取所有关键词的新闻（Bing News RSS + MEE 官网 + 新加坡 双来源）"""
+    """获取所有关键词的新闻（Bing News RSS + MEE 官网 + 新加坡 + 泓济官网）"""
     all_articles = []
     for i, query in enumerate(SEARCH_QUERIES):
         print(f"  [{i+1}/{len(SEARCH_QUERIES)}] 搜索: {query}")
@@ -380,6 +445,17 @@ def fetch_all_news():
     sg_articles = fetch_singapore_news()
     print(f"    获取 {len(sg_articles)} 篇")
     all_articles.extend(sg_articles)
+
+    # 泓济环保官网新闻/公告（每次发送前自动检查）
+    print(f"  补充来源: 泓济环保官网...")
+    honess_articles = fetch_honess_news()
+    if honess_articles:
+        print(f"    获取 {len(honess_articles)} 篇")
+        for a in honess_articles:
+            print(f"      - [{a.get('published', '无日期')}] {a['title'][:40]}")
+    else:
+        print(f"    无新动态")
+    all_articles.extend(honess_articles)
 
     return all_articles
 
@@ -434,6 +510,10 @@ def filter_relevant(articles):
         if a.get('_singapore'):
             relevant.append(a)
             continue
+        # 泓济官网新闻直接通过（公司动态不需要关键词匹配）
+        if a.get('_honess'):
+            relevant.append(a)
+            continue
         text = a['title'] + ' ' + a['summary']
         # 排除台湾省新闻
         if any(kw in text for kw in TAIWAN_KEYWORDS):
@@ -447,13 +527,26 @@ def filter_relevant(articles):
 
 
 def filter_recent(articles, days=14):
-    """过滤最近N天的新闻（无日期的保留，新加坡来源不受日期限制）"""
+    """过滤最近N天的新闻（无日期的保留，新加坡来源不受日期限制，泓济官网用90天窗口）"""
     cutoff = datetime.utcnow() - timedelta(days=days)
+    honess_cutoff = datetime.utcnow() - timedelta(days=90)
     recent = []
     for a in articles:
         # 新加坡来源跳过日期过滤
         if a.get('_singapore'):
             recent.append(a)
+            continue
+        # 泓济官网用90天窗口（公司官网更新不频繁）
+        if a.get('_honess'):
+            if a['published_parsed']:
+                try:
+                    dt = datetime(*a['published_parsed'][:6])
+                    if dt >= honess_cutoff:
+                        recent.append(a)
+                except Exception:
+                    recent.append(a)
+            else:
+                recent.append(a)
             continue
         if a['published_parsed']:
             try:
@@ -486,7 +579,9 @@ def filter_valid_links(articles):
 
 
 def tag_article(article):
-    """为文章打标签: 政策/技术/市场"""
+    """为文章打标签: 公司动态/政策/技术/市场"""
+    if article.get('_honess'):
+        return '公司动态'
     text = article['title'] + ' ' + article['summary']
     if any(kw in text for kw in POLICY_KEYWORDS):
         return '政策'
@@ -498,6 +593,7 @@ def tag_article(article):
 
 def select_news(articles, count=6):
     """选择最重要的N条新闻，保证分类多样性
+    - 泓济官网新闻优先入选（公司动态）
     - 新加坡新闻最多保留1条
     """
     # 排序：新到旧
@@ -507,12 +603,14 @@ def select_news(articles, count=6):
     for a in articles:
         a['tag'] = tag_article(a)
 
-    # 分区：大陆新闻优先，新加坡限1条
+    # 分区：泓济官网优先 → 大陆新闻 → 新加坡限1条
+    honess = []
     mainland = []
     singapore = []
     for a in articles:
-        text = a['title'] + ' ' + a['summary']
-        if any(kw in text for kw in SINGAPORE_KEYWORDS):
+        if a.get('_honess'):
+            honess.append(a)
+        elif any(kw in (a['title'] + ' ' + a['summary']) for kw in SINGAPORE_KEYWORDS):
             singapore.append(a)
         else:
             mainland.append(a)
@@ -522,19 +620,26 @@ def select_news(articles, count=6):
     if singapore:
         print(f"  新加坡新闻: 保留1条（共{len([a for a in articles if any(kw in (a['title']+' '+a['summary']) for kw in SINGAPORE_KEYWORDS)])}条）")
 
-    # 合并：大陆 → 新加坡(1条)
-    prioritized = mainland + singapore
+    if honess:
+        print(f"  泓济官网新闻: {len(honess)}条（优先入选）")
+
+    # 合并：泓济官网 → 大陆 → 新加坡(1条)
+    prioritized = honess + mainland + singapore
 
     # 按分类限制数量
     selected = []
-    tag_counts = {'政策': 0, '技术': 0, '市场': 0}
+    tag_counts = {'公司动态': 0, '政策': 0, '技术': 0, '市场': 0}
     max_per_tag = 3
 
     for a in prioritized:
         if len(selected) >= count:
             break
         tag = a['tag']
-        if tag_counts.get(tag, 0) < max_per_tag:
+        # 公司动态不限量（泓济官网新闻有多少选多少）
+        if tag == '公司动态':
+            selected.append(a)
+            tag_counts[tag] = tag_counts.get(tag, 0) + 1
+        elif tag_counts.get(tag, 0) < max_per_tag:
             selected.append(a)
             tag_counts[tag] = tag_counts.get(tag, 0) + 1
 
@@ -739,7 +844,7 @@ def generate_html(news, policies):
         p['display_text'] = (p.get('content') or '')[:150]
 
     # 统计
-    tag_counts = {'政策': 0, '技术': 0, '市场': 0}
+    tag_counts = {'公司动态': 0, '政策': 0, '技术': 0, '市场': 0}
     for n in news:
         tag_counts[n.get('tag', '市场')] = tag_counts.get(n.get('tag', '市场'), 0) + 1
 
@@ -757,6 +862,7 @@ def generate_html(news, policies):
         tech_count=tag_counts.get('技术', 0),
         market_count=tag_counts.get('市场', 0),
         policy_tag_count=tag_counts.get('政策', 0),
+        company_count=tag_counts.get('公司动态', 0),
     )
 
     return html

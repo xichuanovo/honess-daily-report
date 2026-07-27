@@ -130,6 +130,9 @@ body{background:#e8e4d8;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",
   <div class="subbar">
     <div class="item">资讯 <strong>{{ news_count }}</strong></div>
     <div class="item">法规 <strong>{{ policy_count }}</strong></div>
+    {% if company_count and company_count > 0 %}
+    <div class="item">公司动态 <strong>{{ company_count }}</strong></div>
+    {% endif %}
     <div class="item">技术 <strong>{{ tech_count }}</strong></div>
     <div class="item">市场 <strong>{{ market_count }}</strong></div>
     <div class="item">政策 <strong>{{ policy_tag_count }}</strong></div>
