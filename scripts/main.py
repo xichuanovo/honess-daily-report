@@ -115,6 +115,17 @@ def should_skip_url(url):
     return False
 
 
+def is_valid_link(url):
+    """检查 URL 是否适合在邮件中展示为'查看原文'链接"""
+    if not url or is_google_news_link(url):
+        return False
+    url_lower = url.lower()
+    for domain in SKIP_DOMAINS:
+        if domain in url_lower:
+            return False
+    return True
+
+
 def clean_content(content, title=''):
     """清理提取的正文内容：过滤垃圾文本、验证相关性"""
     if not content:
@@ -541,7 +552,7 @@ def generate_html(news, policies):
     featured = news[0] if news else None
     if featured:
         featured['date_short'] = format_date_short(featured.get('published_parsed'))
-        featured['has_valid_link'] = featured.get('link', '') and not is_google_news_link(featured.get('link', ''))
+        featured['has_valid_link'] = is_valid_link(featured.get('link', ''))
         # 展示内容：优先用抓取的正文，回退到 RSS 摘要，最后回退到生成的摘要
         featured['display_text'] = generate_snippet(
             featured.get('title', ''),
@@ -552,7 +563,7 @@ def generate_html(news, policies):
     two_col_news = news[1:4] if len(news) > 1 else []
     for n in two_col_news:
         n['date_short'] = format_date_short(n.get('published_parsed'))
-        n['has_valid_link'] = n.get('link', '') and not is_google_news_link(n.get('link', ''))
+        n['has_valid_link'] = is_valid_link(n.get('link', ''))
         n['display_text'] = generate_snippet(
             n.get('title', ''),
             n.get('content'),
@@ -578,7 +589,7 @@ def generate_html(news, policies):
 
     # 为政策标记是否有有效链接 + 准备展示内容
     for p in policies:
-        p['has_valid_link'] = p.get('link', '') and not is_google_news_link(p.get('link', ''))
+        p['has_valid_link'] = is_valid_link(p.get('link', ''))
         p['display_text'] = (p.get('content') or '')[:150]
 
     # 统计
@@ -625,7 +636,7 @@ def save_news_json(news, policies):
             'source': n.get('source', ''),
             'time': time_str,
             'tag': n.get('tag', '市场'),
-            'url': n.get('link', '') if not is_google_news_link(n.get('link', '')) else '',
+            'url': n.get('link', '') if is_valid_link(n.get('link', '')) else '',
             'content': (n.get('content') or '')[:300],
         })
 
@@ -651,7 +662,7 @@ def save_news_json(news, policies):
             'title': p.get('title', ''),
             'date': date_str,
             'status': p.get('status', '新发布'),
-            'url': p.get('link', '') if not is_google_news_link(p.get('link', '')) else '',
+            'url': p.get('link', '') if is_valid_link(p.get('link', '')) else '',
             'content': (p.get('content') or '')[:300],
         })
 
