@@ -436,10 +436,14 @@ def filter_relevant(articles):
 
 
 def filter_recent(articles, days=14):
-    """过滤最近N天的新闻（无日期的保留）"""
+    """过滤最近N天的新闻（无日期的保留，新加坡来源不受日期限制）"""
     cutoff = datetime.utcnow() - timedelta(days=days)
     recent = []
     for a in articles:
+        # 新加坡来源跳过日期过滤
+        if a.get('_singapore'):
+            recent.append(a)
+            continue
         if a['published_parsed']:
             try:
                 dt = datetime(*a['published_parsed'][:6])
