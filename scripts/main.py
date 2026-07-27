@@ -281,16 +281,23 @@ def fetch_all_news():
 
 
 def extract_title_keywords(title):
-    """从标题中提取关键词集合（用于去重）"""
-    # 提取2字以上的中文词组
-    words = re.findall(r'[\u4e00-\u9fff]{2,}', title)
-    # 过滤掉太常见的词
-    stop_words = {'本报', '记者', '报道', '新闻', '今天', '昨日', '据悉', '根据'}
-    return set(w for w in words if w not in stop_words)
+    """从标题中提取关键词集合（滑动窗口法，用于去重）"""
+    chars = re.findall(r'[\u4e00-\u9fff]', title)
+    keywords = set()
+    # 提取所有2字中文子串
+    for i in range(len(chars) - 1):
+        keywords.add(''.join(chars[i:i+2]))
+    # 提取所有3字中文子串
+    for i in range(len(chars) - 2):
+        keywords.add(''.join(chars[i:i+3]))
+    # 过滤停用词
+    stop_words = {'本报', '记者', '报道', '新闻', '今天', '昨日', '据悉',
+                  '根据', '会的', '月日', '指出', '要求', '强调'}
+    return set(w for w in keywords if w not in stop_words)
 
 
 def deduplicate(articles):
-    """去重：基于标题关键词相似度"""
+    """去重：基于标题关键词相似度（滑动窗口）"""
     if not articles:
         return []
     seen = []
@@ -302,9 +309,10 @@ def deduplicate(articles):
         kw = extract_title_keywords(title)
         is_dup = False
         for prev_title, prev_kw in seen:
-            # 计算关键词重叠度
             overlap = kw & prev_kw
-            if len(overlap) >= 3 or (len(overlap) >= 2 and len(kw) <= 4):
+            # 共享3字关键词 = 高度相似
+            long_overlap = {k for k in overlap if len(k) >= 3}
+            if len(long_overlap) >= 1 or len(overlap) >= 5:
                 is_dup = True
                 break
         if not is_dup:
@@ -485,8 +493,9 @@ def deduplicate_cross_section(news, policies):
     for p in policies:
         pol_kw = extract_title_keywords(p.get('title', ''))
         overlap = news_keywords & pol_kw
-        # 如果法规与新闻有3个以上关键词重叠，认为是重复
-        if len(overlap) >= 3:
+        long_overlap = {k for k in overlap if len(k) >= 3}
+        # 共享3字关键词 = 主题重复
+        if len(long_overlap) >= 1 or len(overlap) >= 5:
             print(f"  [跨栏目去重] 移除法规（与新闻重复）: {p['title'][:40]}...")
             continue
         filtered.append(p)
