@@ -74,10 +74,12 @@ EXCLUDE_KEYWORDS = [
     '干部大会', '主题教育', '党建', '干部培训',
 ]
 
-# 台湾省相关关键词（降低优先级，聚焦大陆新闻）
+# 台湾省相关关键词（降低优先级，聚焦大陆新闻，含繁体字）
 TAIWAN_KEYWORDS = [
     '台湾', '台北', '台南', '高雄', '新北', '桃园', '台中',
     '台啤', '台企', '台商', '台当局', '蔡英文', '赖清德',
+    # 繁体字变体
+    '臺灣', '臺北', '臺南', '臺中', '臺當局',
 ]
 
 # 新加坡相关关键词（新加坡环保/水务新闻，最多保留1条）
@@ -167,11 +169,13 @@ def clean_content(content, title=''):
     # 检查内容与标题的相关性（至少共享2个中文词）
     if title:
         title_chars = set(re.findall(r'[\u4e00-\u9fff]', title))
-        content_chars = set(re.findall(r'[\u4e00-\u9fff]', content[:200]))
-        overlap = title_chars & content_chars
-        if len(overlap) < 2:
-            print(f"    [clean] 内容与标题不相关（重叠{len(overlap)}字），丢弃")
-            return None
+        # 英文标题（无中文字符）跳过重叠检查，直接保留
+        if title_chars:
+            content_chars = set(re.findall(r'[\u4e00-\u9fff]', content[:200]))
+            overlap = title_chars & content_chars
+            if len(overlap) < 2:
+                print(f"    [clean] 内容与标题不相关（重叠{len(overlap)}字），丢弃")
+                return None
     # 清理正文末尾常见的导航/功能文本块（截断式，不丢弃整段）
     junk_triggers = [
         '相关阅读推荐', '您可能对以下文章感兴趣', '温馨提示',
