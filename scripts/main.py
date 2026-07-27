@@ -70,6 +70,18 @@ EXCLUDE_KEYWORDS = [
     '干部大会', '主题教育', '党建', '干部培训',
 ]
 
+# 台湾省相关关键词（降低优先级，聚焦大陆新闻）
+TAIWAN_KEYWORDS = [
+    '台湾', '台北', '台南', '高雄', '新北', '桃园', '台中',
+    '台啤', '台企', '台商', '台当局', '蔡英文', '赖清德',
+]
+
+# 新加坡相关关键词（新加坡环保/水务新闻，最多保留1条）
+SINGAPORE_KEYWORDS = [
+    '新加坡', 'Singapore', 'PUB', 'NEWater', 'Marina Barrage',
+    'Tuas', 'Changi', 'Jurong',
+]
+
 # 跳过的域名（JS渲染/反爬/内容质量差）
 SKIP_DOMAINS = ['msn.com', 'msn.cn', 'investing.com', 'bing.com']
 
@@ -304,8 +316,42 @@ def fetch_mee_news():
     return articles
 
 
+# 新加坡环保/水务新闻搜索关键词
+SINGAPORE_SEARCH_QUERIES = [
+    "Singapore water treatment",
+    "Singapore PUB water",
+    "Singapore environmental policy",
+    "新加坡 水务 环保",
+]
+
+
+def fetch_singapore_news():
+    """搜索新加坡环保/水务相关新闻（Bing News RSS）
+    仅返回与水处理/环保相关的新加坡新闻，最多5篇"""
+    all_articles = []
+    for query in SINGAPORE_SEARCH_QUERIES:
+        articles = fetch_rss(query)
+        # 过滤：标题或摘要中必须包含新加坡相关关键词
+        for a in articles:
+            text = a['title'] + ' ' + a['summary']
+            if any(kw.lower() in text.lower() for kw in SINGAPORE_KEYWORDS):
+                # 同时检查是否与环保/水处理相关
+                env_keywords = ['water', 'waterwater', 'treatment', 'environment',
+                                'seawater', 'desalination', 'recycling', 'reuse',
+                                'pollution', 'emission', 'sustainability',
+                                '水', '环保', '污水', '废水', '水务', '再生水']
+                if any(kw.lower() in text.lower() for kw in env_keywords):
+                    a['tag'] = '市场'  # 新加坡新闻标记为市场类
+                    all_articles.append(a)
+        time.sleep(0.3)
+        if len(all_articles) >= 5:
+            break
+
+    return all_articles[:5]
+
+
 def fetch_all_news():
-    """获取所有关键词的新闻（Bing News RSS + MEE 官网 双来源）"""
+    """获取所有关键词的新闻（Bing News RSS + MEE 官网 + 新加坡 双来源）"""
     all_articles = []
     for i, query in enumerate(SEARCH_QUERIES):
         print(f"  [{i+1}/{len(SEARCH_QUERIES)}] 搜索: {query}")
@@ -319,6 +365,12 @@ def fetch_all_news():
     mee_articles = fetch_mee_news()
     print(f"    获取 {len(mee_articles)} 篇（已过滤相关性）")
     all_articles.extend(mee_articles)
+
+    # 新加坡环保/水务新闻（独立搜索，最多保留1条在日报中）
+    print(f"  补充来源: 新加坡环保水务新闻...")
+    sg_articles = fetch_singapore_news()
+    print(f"    获取 {len(sg_articles)} 篇")
+    all_articles.extend(sg_articles)
 
     return all_articles
 
@@ -421,7 +473,10 @@ def tag_article(article):
 
 
 def select_news(articles, count=6):
-    """选择最重要的N条新闻，保证分类多样性"""
+    """选择最重要的N条新闻，保证分类多样性
+    - 台湾省新闻降低优先级（排到最后，仅在不够时补充）
+    - 新加坡新闻最多保留1条
+    """
     # 排序：新到旧
     articles.sort(key=lambda x: x['published_parsed'] or (0,), reverse=True)
 
@@ -429,12 +484,36 @@ def select_news(articles, count=6):
     for a in articles:
         a['tag'] = tag_article(a)
 
+    # 分区：大陆新闻优先，台湾新闻降级，新加坡限1条
+    mainland = []
+    taiwan = []
+    singapore = []
+    for a in articles:
+        text = a['title'] + ' ' + a['summary']
+        if any(kw in text for kw in SINGAPORE_KEYWORDS):
+            singapore.append(a)
+        elif any(kw in text for kw in TAIWAN_KEYWORDS):
+            taiwan.append(a)
+        else:
+            mainland.append(a)
+
+    # 新加坡最多保留1条
+    singapore = singapore[:1]
+    if singapore:
+        print(f"  新加坡新闻: 保留1条（共{len([a for a in articles if any(kw in (a['title']+' '+a['summary']) for kw in SINGAPORE_KEYWORDS)])}条）")
+
+    if taiwan:
+        print(f"  台湾省新闻: {len(taiwan)}条降级到末尾")
+
+    # 合并：大陆 → 新加坡(1条) → 台湾(最后补充)
+    prioritized = mainland + singapore
+
     # 按分类限制数量
     selected = []
     tag_counts = {'政策': 0, '技术': 0, '市场': 0}
     max_per_tag = 3
 
-    for a in articles:
+    for a in prioritized:
         if len(selected) >= count:
             break
         tag = a['tag']
@@ -442,9 +521,10 @@ def select_news(articles, count=6):
             selected.append(a)
             tag_counts[tag] = tag_counts.get(tag, 0) + 1
 
-    # 如果不够，补齐
+    # 如果不够，从台湾新闻补充
+    remaining_pool = taiwan + [a for a in prioritized if a not in selected]
     if len(selected) < count:
-        for a in articles:
+        for a in remaining_pool:
             if a not in selected:
                 selected.append(a)
                 if len(selected) >= count:
