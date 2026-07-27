@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>泓济环保·行业日报</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#e8e4d8;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","WenQuanYi Micro Hei",sans-serif;color:#1a1a1a;line-height:1.7;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
+.paper{max-width:960px;margin:0 auto;background:#f5f1e8;padding:40px 44px 36px;box-shadow:0 4px 30px rgba(0,0,0,0.1);position:relative;}
+.paper::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background-image:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.008) 3px,rgba(0,0,0,0.008) 4px);pointer-events:none;}
+.masthead{text-align:center;border-bottom:3px double #1a1a1a;padding-bottom:16px;margin-bottom:0;position:relative;z-index:1;}
+.mast-top{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#555;margin-bottom:10px;font-family:Georgia,"Times New Roman",serif;}
+.mast-top .left{text-align:left;font-weight:600;}
+.mast-top .right{text-align:right;font-weight:600;}
+.mast-title{font-size:42px;font-weight:800;letter-spacing:6px;margin-bottom:4px;font-family:Georgia,"Noto Serif SC","Songti SC","SimSun",serif;color:#0d0d0d;line-height:1.2;}
+.mast-title .en{font-size:12px;font-weight:500;letter-spacing:3px;color:#666;display:block;margin-top:6px;font-family:Georgia,serif;}
+.mast-sub{font-size:14px;color:#444;font-style:italic;margin-top:8px;font-weight:500;}
+.mast-rule{border-top:2px solid #1a1a1a;margin-top:12px;}
+.mast-rule-thin{border-top:1px solid #bbb;margin-top:4px;}
+.subbar{display:flex;justify-content:space-between;padding:10px 0 12px;font-size:13px;color:#555;border-bottom:1px solid #bbb;position:relative;z-index:1;}
+.subbar .item{display:flex;align-items:center;gap:6px;}
+.subbar .item strong{color:#0d0d0d;font-weight:800;font-size:15px;}
+.content{position:relative;z-index:1;padding-top:20px;}
+.featured{border-bottom:1px solid #999;padding-bottom:22px;margin-bottom:22px;}
+.featured .kicker{font-size:11px;letter-spacing:2px;font-weight:800;color:#b71c1c;text-transform:uppercase;margin-bottom:8px;font-family:Georgia,serif;}
+.featured h1{font-size:28px;font-weight:800;line-height:1.35;margin-bottom:10px;color:#0d0d0d;}
+.featured .deck{font-size:15px;color:#444;font-style:italic;margin-bottom:10px;line-height:1.65;font-weight:500;}
+.featured .byline{font-size:12px;color:#777;border-top:1px solid #ddd;border-bottom:1px solid #ddd;padding:5px 0;margin-bottom:12px;display:flex;justify-content:space-between;font-family:Georgia,serif;}
+.featured .body-text{font-size:15px;color:#2a2a2a;line-height:1.85;text-align:justify;}
+.featured .body-text::first-letter{font-size:36px;font-weight:800;float:left;line-height:1;margin-right:5px;margin-top:2px;color:#0d0d0d;font-family:Georgia,"Noto Serif SC",serif;}
+.featured .read-more{font-size:12px;color:#b71c1c;text-decoration:none;font-weight:800;margin-top:8px;display:inline-block;}
+.two-col{column-count:2;column-gap:32px;column-rule:1px solid #ddd;padding-bottom:22px;border-bottom:1px solid #999;margin-bottom:22px;}
+.two-col .story{break-inside:avoid;margin-bottom:20px;}
+.two-col .story h3{font-size:16px;font-weight:800;line-height:1.4;margin-bottom:6px;color:#0d0d0d;}
+.two-col .story .meta{font-size:11px;color:#777;margin-bottom:5px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;font-family:Georgia,serif;}
+.two-col .story p{font-size:14px;color:#3a3a3a;line-height:1.75;text-align:justify;}
+.two-col .story .read-more{font-size:11px;color:#b71c1c;text-decoration:none;font-weight:800;}
+.sec-head{font-size:12px;font-weight:800;letter-spacing:4px;text-transform:uppercase;color:#0d0d0d;border-top:2px solid #1a1a1a;border-bottom:1px solid #1a1a1a;padding:5px 0;margin-bottom:14px;text-align:center;font-family:Georgia,serif;}
+.policy-list{padding-bottom:22px;border-bottom:1px solid #999;margin-bottom:22px;}
+.pol-item{display:flex;align-items:baseline;gap:10px;padding:8px 0;border-bottom:1px dotted #bbb;transition:background 0.15s;}
+.pol-item:hover{background:rgba(21,101,192,0.04);}
+.pol-item:last-child{border-bottom:none;}
+.pol-bullet{width:7px;height:7px;border-radius:50%;flex-shrink:0;position:relative;top:7px;}
+.pol-new{background:#b71c1c;}
+.pol-active{background:#1565c0;}
+.pol-text{font-size:14px;color:#2a2a2a;flex:1;line-height:1.55;font-weight:500;}
+.pol-text strong{font-weight:800;}
+.pol-text a{color:#1565c0;text-decoration:none;font-weight:800;}
+.pol-text a:hover{text-decoration:underline;}
+.pol-text .status{font-size:10px;padding:2px 7px;border-radius:2px;font-weight:800;margin-right:7px;letter-spacing:0.5px;font-family:Georgia,serif;}
+.st-new{background:#fce8e8;color:#b71c1c;}
+.st-active{background:#e3f2fd;color:#1565c0;}
+.pol-date{font-size:12px;color:#888;white-space:nowrap;font-family:Georgia,serif;font-weight:600;}
+.briefs{column-count:3;column-gap:22px;padding-bottom:22px;border-bottom:1px solid #999;margin-bottom:22px;}
+.brief{break-inside:avoid;margin-bottom:14px;}
+.brief h4{font-size:13px;font-weight:800;margin-bottom:3px;line-height:1.45;color:#0d0d0d;}
+.brief .meta{font-size:11px;color:#777;margin-bottom:5px;font-weight:500;}
+.brief p{font-size:12px;color:#444;line-height:1.65;}
+.keywords{padding:14px 0;border-bottom:1px solid #999;margin-bottom:18px;text-align:center;}
+.kw-label{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#777;margin-bottom:10px;font-family:Georgia,serif;font-weight:700;}
+.kw-chips{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;}
+.kw-chip{font-size:12px;padding:4px 14px;border:1px solid #1a1a1a;font-weight:600;background:#f5f1e8;}
+.kw-chip.featured-chip{background:#1a1a1a;color:#f5f1e8;}
+.colophon{text-align:center;padding-top:14px;font-size:11px;color:#888;line-height:1.9;font-family:Georgia,serif;position:relative;z-index:1;}
+.colophon .name{font-size:13px;color:#0d0d0d;font-weight:800;letter-spacing:2px;margin-bottom:3px;}
+.colophon .links{margin-top:10px;display:flex;justify-content:center;gap:16px;}
+.colophon .links a{font-size:11px;color:#555;text-decoration:none;border-bottom:1px solid transparent;font-weight:600;}
+.colophon .links a:hover{border-bottom-color:#555;}
+@media(max-width:768px){
+  .paper{max-width:100%;padding:28px 26px 24px;}
+  .mast-title{font-size:32px;letter-spacing:4px;}
+  .mast-title .en{font-size:11px;}
+  .subbar{font-size:12px;flex-wrap:wrap;gap:8px 12px;}
+  .subbar .item strong{font-size:14px;}
+  .featured h1{font-size:23px;}
+  .featured .deck{font-size:14px;}
+  .featured .body-text{font-size:14px;}
+  .two-col{column-count:1;column-rule:none;}
+  .briefs{column-count:2;column-gap:18px;}
+  .policy-list .pol-item{flex-wrap:wrap;}
+  .pol-date{width:100%;text-align:right;margin-top:2px;}
+}
+@media(max-width:480px){
+  .paper{padding:18px 16px 16px;}
+  .mast-top{font-size:10px;}
+  .mast-title{font-size:26px;letter-spacing:2px;}
+  .mast-title .en{font-size:9px;margin-top:4px;letter-spacing:1px;}
+  .mast-sub{font-size:12px;}
+  .subbar{flex-direction:row;flex-wrap:wrap;gap:6px 10px;font-size:11px;padding:8px 0;}
+  .subbar .item strong{font-size:13px;}
+  .featured{padding-bottom:16px;margin-bottom:16px;}
+  .featured .kicker{font-size:10px;}
+  .featured h1{font-size:19px;}
+  .featured .deck{font-size:13px;margin-bottom:8px;}
+  .featured .byline{font-size:11px;}
+  .featured .body-text{font-size:13px;line-height:1.75;}
+  .featured .body-text::first-letter{font-size:28px;}
+  .two-col{padding-bottom:16px;margin-bottom:16px;}
+  .two-col .story{margin-bottom:16px;}
+  .two-col .story h3{font-size:15px;}
+  .two-col .story p{font-size:13px;}
+  .sec-head{font-size:11px;letter-spacing:2px;margin-bottom:10px;}
+  .policy-list{padding-bottom:14px;margin-bottom:14px;}
+  .pol-item{padding:6px 0;gap:8px;}
+  .pol-text{font-size:13px;line-height:1.5;}
+  .pol-date{font-size:10px;}
+  .briefs{display:none;}
+  .keywords{padding:10px 0;margin-bottom:12px;}
+  .kw-chips{gap:6px;}
+  .kw-chip{font-size:11px;padding:3px 10px;}
+  .colophon{font-size:10px;}
+  .colophon .links{gap:12px;}
+}
+</style>
+</head>
+<body>
+<div class="paper">
+  <div class="masthead">
+    <div class="mast-top">
+      <div class="left">第 249 期</div>
+      <div class="right">2026年07月24日 周五</div>
+    </div>
+    <div class="mast-title">泓济行业日报<span class="en">HONESS ENVIRONMENTAL DAILY</span></div>
+    <div class="mast-sub">专注水处理 · 服务环保人</div>
+    <div class="mast-rule"></div>
+    <div class="mast-rule-thin"></div>
+  </div>
+
+  <div class="subbar">
+    <div class="item">资讯 <strong>1</strong></div>
+    <div class="item">法规 <strong>5</strong></div>
+    <div class="item">技术 <strong>0</strong></div>
+    <div class="item">市场 <strong>1</strong></div>
+    <div class="item">政策 <strong>0</strong></div>
+  </div>
+
+  <div class="content">
+    
+    <div class="featured">
+      <div class="kicker">&#9733; 头版头条</div>
+      <h1>山东省委书记林武在研究中央生态环保督察反馈问题整改时强调 坚决完成污染防治目标任务</h1>
+      
+      <div class="deck">山东省委常委会近日召开会议，传达学习习近平总书记对防汛救灾工作、常态化做好东西部协作工作作出的重要指示精神，认真学习《习近平关于基层工作方法论述摘编》，研究中央生态环保督察反馈问题整改等事项。山东省委书记林武主持会议并讲话。
+会议指出，要坚决克服麻痹思想和侥幸心理，坚持底线思维、极限思维，从严从实从...</div>
+      
+      <div class="byline">
+        <span>来源：生态环境部</span>
+        <span>07-22</span>
+      </div>
+      <div class="body-text">山东省委常委会近日召开会议，传达学习习近平总书记对防汛救灾工作、常态化做好东西部协作工作作出的重要指示精神，认真学习《习近平关于基层工作方法论述摘编》，研究中央生态环保督察反馈问题整改等事项。山东省委书记林武主持会议并讲话。
+会议指出，要坚决克服麻痹思想和侥幸心理，坚持底线思维、极限思维，从严从实从细做好防汛救灾各项工作，进一步完善防台风工作方案，加密监测预报分析频次，坚决守牢防御薄弱环节，聚焦黄河防汛、水库安全、城市内涝、海上安全、山洪和地质灾害防范等重点区域部位，持续开展风险隐患排查整治，做好人员转移避险准备，严格落实值班值守制度，充分发挥基层党组织战斗堡垒作用和广大党员干部先锋模范作用，确保人民群众生命财产安全和社会大局稳定。要统筹抓好特色产业提升、产业集群打造、消费帮扶增效、劳务协作提质“四项行动”，促进优势互补、双向赋能、共同发展。要认真学习《习近平关于基层工作方法论述摘编》，强化基层党组织领导作用，规范提升基层党组织联建工作，主动联系服务群众，持续深化为基层减负，全面提升基层治理水平。
+会议审议了《山东省第三轮中央生态环境保护督察整改落实情况报告》，强调要深入学习贯彻习近平</div>
+      
+      <a class="read-more" href="https://www.mee.gov.cn/ywdt/dfnews/202607/t20260722_1162590.shtml" target="_blank" rel="noopener noreferrer">查看原文 &#9656;</a>
+      
+    </div>
+    
+
+    
+
+    <div class="sec-head">政策法规追踪</div>
+    <div class="policy-list">
+      
+      <div class="pol-item">
+        <div class="pol-bullet pol-new"></div>
+        <div class="pol-text">
+          <span class="status st-new">新发布</span>
+          
+          <a href="https://www.mee.gov.cn/zcwj/zcjd/202607/t20260724_1162735.shtml" target="_blank" rel="noopener noreferrer">财政部 税务总局 生态环境部有关司负责人就开展征收挥发性有机物环境保护税试点答记者问</a>
+          
+        </div>
+        <div class="pol-date">07-24</div>
+      </div>
+      
+      <div class="pol-item">
+        <div class="pol-bullet pol-new"></div>
+        <div class="pol-text">
+          <span class="status st-new">新发布</span>
+          
+          <a href="https://www.mee.gov.cn/zcwj/zcjd/202607/t20260724_1162732.shtml" target="_blank" rel="noopener noreferrer">守护群众身边水 | 深入打好家门口碧水保卫战 绘就人民群众身边秀美水篇章</a>
+          
+        </div>
+        <div class="pol-date">07-24</div>
+      </div>
+      
+      <div class="pol-item">
+        <div class="pol-bullet pol-new"></div>
+        <div class="pol-text">
+          <span class="status st-new">新发布</span>
+          
+          <a href="https://www.mee.gov.cn/zcwj/zcjd/202607/t20260723_1162620.shtml" target="_blank" rel="noopener noreferrer">守护群众身边水 | 深入学习贯彻习近平生态文明思想  大力推进群众身边水体保护治理</a>
+          
+        </div>
+        <div class="pol-date">07-23</div>
+      </div>
+      
+      <div class="pol-item">
+        <div class="pol-bullet pol-new"></div>
+        <div class="pol-text">
+          <span class="status st-new">新发布</span>
+          
+          <a href="https://www.mee.gov.cn/zcwj/zcjd/202607/t20260721_1162421.shtml" target="_blank" rel="noopener noreferrer">解读监测“十五五”规划 | 加快建设现代化海洋生态环境监测体系</a>
+          
+        </div>
+        <div class="pol-date">07-21</div>
+      </div>
+      
+      <div class="pol-item">
+        <div class="pol-bullet pol-new"></div>
+        <div class="pol-text">
+          <span class="status st-new">新发布</span>
+          
+          <a href="https://www.mee.gov.cn/zcwj/zcjd/202607/t20260720_1162217.shtml" target="_blank" rel="noopener noreferrer">解读监测“十五五”规划 | 准确把握生态环境监测“十五五”规划的主要任务</a>
+          
+        </div>
+        <div class="pol-date">07-20</div>
+      </div>
+      
+      
+    </div>
+
+    
+
+    
+    <div class="keywords">
+      <div class="kw-label">本期关键词</div>
+      <div class="kw-chips">
+        
+        <span class="kw-chip featured-chip">水处理</span>
+        
+        <span class="kw-chip">环保</span>
+        
+        <span class="kw-chip">污水</span>
+        
+        <span class="kw-chip">政策</span>
+        
+      </div>
+    </div>
+    
+
+    <div class="colophon">
+      <div class="name">HONESS ENVIRONMENTAL</div>
+      <div>本日报由泓济环保行业日报系统自动生成 · Powered by GitHub Actions</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

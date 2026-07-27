@@ -131,8 +131,60 @@ def fetch_rss(query):
         return []
 
 
+def fetch_mee_news():
+    """从生态环境部官网抓取要闻作为新闻备选源"""
+    urls = [
+        'https://www.mee.gov.cn/ywdt/hjywnews/',
+        'https://www.mee.gov.cn/ywdt/dfnews/',
+    ]
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
+    articles = []
+    pattern = re.compile(
+        r'<li[^>]*>.*?<span[^>]*>(\d{4}-\d{2}-\d{2})</span>.*?<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>.*?</li>',
+        re.S
+    )
+
+    for url in urls:
+        try:
+            resp = req_lib.get(url, headers=headers, timeout=15)
+            html = resp.content.decode('utf-8', errors='ignore')
+            for date_str, href, title_raw in pattern.findall(html):
+                title = re.sub(r'<[^>]+>', '', title_raw).strip()
+                if not title or not href:
+                    continue
+                # 补齐链接
+                if href.startswith('http'):
+                    link = href
+                elif href.startswith('/'):
+                    link = 'https://www.mee.gov.cn' + href
+                else:
+                    link = url + href
+                link = link.replace('/./', '/')
+
+                try:
+                    pp = datetime.strptime(date_str, '%Y-%m-%d').timetuple()
+                except Exception:
+                    pp = None
+
+                articles.append({
+                    'title': title,
+                    'source': '生态环境部',
+                    'link': link,
+                    'summary': '',
+                    'content': None,
+                    'published': date_str,
+                    'published_parsed': pp,
+                })
+        except Exception as e:
+            print(f"  MEE 新闻抓取失败 [{url}]: {e}")
+
+    return articles
+
+
 def fetch_all_news():
-    """获取所有关键词的新闻"""
+    """获取所有关键词的新闻（Bing News 为主，MEE 官网为备选）"""
     all_articles = []
     for i, query in enumerate(SEARCH_QUERIES):
         print(f"  [{i+1}/{len(SEARCH_QUERIES)}] 搜索: {query}")
@@ -140,6 +192,14 @@ def fetch_all_news():
         print(f"    获取 {len(articles)} 篇")
         all_articles.extend(articles)
         time.sleep(0.5)  # 礼貌性延迟
+
+    # 如果 Bing News RSS 未返回结果，回退到生态环境部官网要闻
+    if len(all_articles) < 3:
+        print("  Bing News RSS 结果不足，回退到生态环境部官网要闻...")
+        mee_articles = fetch_mee_news()
+        print(f"    获取 {len(mee_articles)} 篇")
+        all_articles.extend(mee_articles)
+
     return all_articles
 
 
@@ -227,20 +287,37 @@ def select_news(articles, count=6):
 
 
 def fetch_policies():
-    """获取政策法规 — 使用 Bing News RSS"""
-    encoded_q = urllib.parse.quote('生态环境部 环保政策')
-    url = f"https://www.bing.com/news/search?q={encoded_q}&format=rss"
+    """获取政策法规 — 直接从生态环境部官网抓取"""
+    url = 'https://www.mee.gov.cn/zcwj/zcjd/'
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
     try:
-        feed = feedparser.parse(url)
+        resp = req_lib.get(url, headers=headers, timeout=15)
+        html = resp.content.decode('utf-8', errors='ignore')
+
+        # 匹配列表项：日期 + 链接 + 标题
+        pattern = re.compile(
+            r'<li[^>]*>.*?<span[^>]*>(\d{4}-\d{2}-\d{2})</span>.*?<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>.*?</li>',
+            re.S
+        )
+        matches = pattern.findall(html)
+
         policies = []
-        for entry in feed.entries[:10]:
-            title = entry.title if hasattr(entry, 'title') else ''
-            link = extract_real_url(entry.link if hasattr(entry, 'link') else '')
-            source = ''
-            if hasattr(entry, 'source') and hasattr(entry.source, 'title'):
-                source = entry.source.title
-            elif hasattr(entry, 'author'):
-                source = entry.author
+        for date_str, href, title_raw in matches[:10]:
+            title = re.sub(r'<[^>]+>', '', title_raw).strip()
+            if not title or not href:
+                continue
+
+            # 补齐链接
+            if href.startswith('http'):
+                link = href
+            elif href.startswith('/'):
+                link = 'https://www.mee.gov.cn' + href
+            else:
+                base = 'https://www.mee.gov.cn/zcwj/zcjd/'
+                link = base + href
+            link = link.replace('/./', '/')
 
             # 判断状态
             text = title.lower()
@@ -249,22 +326,13 @@ def fetch_policies():
             else:
                 status = '新发布'
 
-            # 日期
-            date_display = ''
-            if hasattr(entry, 'published_parsed') and entry.published_parsed:
-                try:
-                    dt = datetime(*entry.published_parsed[:6])
-                    date_display = dt.strftime('%m-%d')
-                except:
-                    pass
-
             policies.append({
-                'title': title.strip(),
+                'title': title,
                 'link': link,
-                'source': source.strip(),
-                'date': date_display,
+                'source': '生态环境部',
+                'date': date_str[5:],  # 转为 MM-DD
                 'status': status,
-                'content': policy_content,
+                'content': None,
             })
 
         # 去重
@@ -519,13 +587,8 @@ def main():
             real_url, content = fetch_page_content(link)
             n['link'] = real_url
             n['content'] = content
-        elif link:
-            print(f"  [{i+1}/{len(news)}] 解析+抓取: {n['title'][:30]}...")
-            real_url, content = resolve_google_news_link(link)
-            n['link'] = real_url
-            n['content'] = content
         else:
-            print(f"  [{i+1}/{len(news)}] 无链接: {n['title'][:30]}...")
+            print(f"  [{i+1}/{len(news)}] 无有效链接: {n['title'][:30]}...")
         time.sleep(0.5)
 
     # 2. 抓取政策法规
@@ -545,13 +608,8 @@ def main():
             real_url, content = fetch_page_content(link)
             p['link'] = real_url
             p['content'] = content
-        elif link:
-            print(f"  [{i+1}/{len(policies)}] 解析+抓取: {p['title'][:30]}...")
-            real_url, content = resolve_google_news_link(link)
-            p['link'] = real_url
-            p['content'] = content
         else:
-            print(f"  [{i+1}/{len(policies)}] 无链接: {p['title'][:30]}...")
+            print(f"  [{i+1}/{len(policies)}] 无有效链接: {p['title'][:30]}...")
         time.sleep(0.5)
 
     # 3. 生成 HTML
