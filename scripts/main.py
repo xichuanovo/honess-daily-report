@@ -74,6 +74,10 @@ JUNK_PATTERNS = [
     '请稍候', '正在为您', '点击这里', '跳转中', '正在进入',
     'Loading', 'Redirecting', 'Please wait', 'Click here',
     '页面不存在', '404', '无法访问', '访问出错',
+    # MEE官网导航/功能文本
+    '仅打印内容', '相关阅读推荐', '您可能对以下文章感兴趣',
+    '温馨提示', '您访问的链接即将离开', '是否继续',
+    '字号：', '打印', '分享到', '收藏', '返回顶部',
 ]
 
 # 选取新闻条数
@@ -134,7 +138,7 @@ def clean_content(content, title=''):
     # 太短的内容直接丢弃
     if len(content) < 50:
         return None
-    # 检查是否包含垃圾文本
+    # 检查是否包含垃圾文本（整段丢弃）
     for pattern in JUNK_PATTERNS:
         if pattern in content:
             print(f"    [clean] 检测到垃圾文本 [{pattern}]，丢弃内容")
@@ -147,6 +151,19 @@ def clean_content(content, title=''):
         if len(overlap) < 2:
             print(f"    [clean] 内容与标题不相关（重叠{len(overlap)}字），丢弃")
             return None
+    # 清理正文末尾常见的导航/功能文本块（截断式，不丢弃整段）
+    junk_triggers = [
+        '相关阅读推荐', '您可能对以下文章感兴趣', '温馨提示',
+        '您访问的链接即将离开', '字号：', '分享到：',
+        '【打印', '【收藏', '【关闭',
+    ]
+    for trigger in junk_triggers:
+        pos = content.find(trigger)
+        if pos > 0:  # 只在正文中间或末尾出现时截断
+            truncated = content[:pos].strip()
+            if len(truncated) >= 50:  # 截断后内容仍然够长
+                content = truncated
+                break
     return content
 
 
@@ -357,6 +374,24 @@ def filter_recent(articles, days=14):
         else:
             recent.append(a)  # 无日期信息也保留
     return recent
+
+
+def filter_valid_links(articles):
+    """过滤掉链接无效的文章（MSN/Google News等跳过域名，且无正文）
+    确保最终展示的新闻都有可访问的原文链接"""
+    valid = []
+    removed = 0
+    for a in articles:
+        link = a.get('link', '')
+        content = a.get('content', '')
+        if is_valid_link(link) or content:
+            # 有效链接 或 已有正文的文章 保留
+            valid.append(a)
+        else:
+            removed += 1
+    if removed:
+        print(f"  过滤无效链接: 移除 {removed} 篇（MSN/Google News等）")
+    return valid
 
 
 def tag_article(article):
@@ -742,6 +777,9 @@ def main():
 
     articles = filter_recent(articles, RECENT_DAYS)
     print(f"  最近{RECENT_DAYS}天: {len(articles)} 篇")
+
+    articles = filter_valid_links(articles)
+    print(f"  有效链接: {len(articles)} 篇")
 
     news = select_news(articles, NEWS_COUNT)
     print(f"  选中: {len(news)} 条")
