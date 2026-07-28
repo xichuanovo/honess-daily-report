@@ -13,6 +13,7 @@ import re
 import time
 import base64
 import urllib.parse
+import xml.etree.ElementTree as ET
 import requests as req_lib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -278,6 +279,27 @@ def fetch_page_content(url):
         return url, None
 
 
+def parse_google_news_source_urls(rss_text):
+    """从 Google News RSS XML 中提取 <source url="..."> 属性
+    Google News RSS 每个 <item> 包含 <source url="真实文章URL">来源名</source>
+    这是获取真实文章 URL 最可靠的方法，无需 HTTP 重定向或 base64 解码"""
+    source_map = {}
+    try:
+        root = ET.fromstring(rss_text)
+        # RSS 2.0: /rss/channel/item
+        for item in root.findall('.//item'):
+            link_elem = item.find('link')
+            source_elem = item.find('source')
+            if link_elem is not None and source_elem is not None:
+                link = (link_elem.text or '').strip()
+                source_url = (source_elem.get('url') or '').strip()
+                if source_url and link and is_google_news_link(link):
+                    source_map[link] = source_url
+    except Exception as e:
+        print(f"  [source_url] XML 解析失败: {e}")
+    return source_map
+
+
 def fetch_rss(query):
     """从 Google News RSS 获取新闻，返回带真实链接的文章列表
     Google News RSS 在美国服务器（GitHub Actions）可访问，返回标准 RSS XML
@@ -315,15 +337,24 @@ def fetch_rss(query):
     if not feed or not feed.entries:
         return []
     try:
+        # 从 RSS XML 中提取 <source url="..."> 获取真实文章 URL（最可靠方法）
+        source_urls = parse_google_news_source_urls(resp.text)
+        resolved_count = 0
         articles = []
-        # 限制每条搜索最多处理10篇，URL解析最多前5篇（避免太慢）
         for idx, entry in enumerate(feed.entries[:10]):
             title = entry.title if hasattr(entry, 'title') else ''
             link = entry.link if hasattr(entry, 'link') else ''
 
-            # Google News 链接需要解析真实 URL（只对前5篇做解析，避免太慢）
-            if is_google_news_link(link) and idx < 5:
-                link = resolve_google_news_url(link)
+            # 优先使用 <source url> 获取真实链接
+            if is_google_news_link(link) and link in source_urls:
+                link = source_urls[link]
+                resolved_count += 1
+            # 后备：base64 解码
+            elif is_google_news_link(link):
+                resolved = resolve_google_news_url(link)
+                if not is_google_news_link(resolved):
+                    link = resolved
+                    resolved_count += 1
 
             # 来源
             source = ''
@@ -350,6 +381,8 @@ def fetch_rss(query):
                 'published': published,
                 'published_parsed': published_parsed,
             })
+        if resolved_count > 0:
+            print(f"  [{query}] URL 解析成功: {resolved_count}/{min(len(feed.entries), 10)} 篇")
         return articles
     except Exception as e:
         print(f"  Google News RSS 解析失败 [{query}]: {e}")
