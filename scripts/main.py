@@ -146,16 +146,34 @@ def is_google_news_link(url):
     return url and 'news.google.com' in url
 
 
+def resolve_google_news_url(url):
+    """跟随 Google News 重定向获取真实文章 URL"""
+    if not url or 'news.google.com' not in url:
+        return url
+    try:
+        resp = req_lib.get(url, timeout=8, allow_redirects=True, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        })
+        final_url = resp.url
+        if final_url and 'news.google.com' not in final_url:
+            return final_url
+    except Exception:
+        pass
+    return url
+
+
 def extract_real_url(link):
-    """从 Bing News 跳转链接中提取真实文章 URL"""
+    """从新闻跳转链接中提取真实文章 URL（支持 Bing 和 Google News）"""
     if not link:
         return link
+    # Bing News 跳转链接
     if 'bing.com/news/apiclick' in link:
         parsed = urllib.parse.urlparse(link)
         params = urllib.parse.parse_qs(parsed.query)
         real_url = params.get('url', [None])[0]
         if real_url:
             return real_url
+    # Google News 链接需要跟随重定向（在 fetch_rss 中已处理，这里作为后备）
     return link
 
 
@@ -239,25 +257,51 @@ def fetch_page_content(url):
 
 
 def fetch_rss(query):
-    """从 Bing News RSS 获取新闻，返回带真实链接的文章列表（含一次重试）"""
+    """从 Google News RSS 获取新闻，返回带真实链接的文章列表
+    Google News RSS 在美国服务器（GitHub Actions）可访问，返回标准 RSS XML
+    同时对 Google News 重定向链接做 URL 解析获取真实文章地址"""
     encoded_query = urllib.parse.quote(query)
-    # Bing News RSS — 直接提供原始文章链接，国内可访问
-    url = f"https://www.bing.com/news/search?q={encoded_query}&format=rss"
+    # Google News RSS — 从 GitHub Actions (美国) 可访问，返回中文新闻
+    url = f"https://news.google.com/rss/search?q={encoded_query}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36',
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+    }
+    feed = None
     for attempt in range(2):  # 最多尝试2次
         try:
-            feed = feedparser.parse(url)
+            resp = req_lib.get(url, headers=headers, timeout=15)
+            # 检查返回内容是否为 RSS/XML
+            if not resp.text.startswith('<?xml') and '<rss' not in resp.text and '<feed' not in resp.text:
+                if attempt == 0:
+                    time.sleep(1)
+                    continue
+                else:
+                    print(f"  Google News RSS 返回非XML内容 [{query}]")
+                    return []
+            feed = feedparser.parse(resp.text)
             if feed.entries:
                 break
             if attempt == 0:
                 time.sleep(1)  # 第一次为空时等1秒重试
-        except Exception:
+        except Exception as e:
             if attempt == 0:
                 time.sleep(1)
+            else:
+                print(f"  Google News RSS 获取失败 [{query}]: {e}")
+                return []
+    if not feed or not feed.entries:
+        return []
     try:
         articles = []
-        for entry in feed.entries:
+        # 限制每条搜索最多处理10篇，URL解析最多前5篇（避免太慢）
+        for idx, entry in enumerate(feed.entries[:10]):
             title = entry.title if hasattr(entry, 'title') else ''
             link = entry.link if hasattr(entry, 'link') else ''
+
+            # Google News 链接需要解析真实 URL（只对前5篇做解析，避免太慢）
+            if is_google_news_link(link) and idx < 5:
+                link = resolve_google_news_url(link)
 
             # 来源
             source = ''
@@ -278,7 +322,7 @@ def fetch_rss(query):
             articles.append({
                 'title': title.strip(),
                 'source': source.strip(),
-                'link': extract_real_url(link),
+                'link': link,
                 'summary': summary,
                 'content': None,
                 'published': published,
@@ -286,7 +330,7 @@ def fetch_rss(query):
             })
         return articles
     except Exception as e:
-        print(f"  Bing RSS 获取失败 [{query}]: {e}")
+        print(f"  Google News RSS 解析失败 [{query}]: {e}")
         return []
 
 
