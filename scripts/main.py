@@ -24,21 +24,21 @@ from trafilatura import extract as traf_extract
 
 # ==================== 配置 ====================
 
-# 搜索关键词（每个关键词对应一次 Bing News RSS 查询）
+# 搜索关键词（每个关键词对应一次 Google News RSS 查询）
+# 聚焦工业废水/工业水处理，减少纯市政新闻
 SEARCH_QUERIES = [
-    "污水处理",
-    "环保 水处理",
+    "工业废水处理",
     "工业废水 零排放",
-    "水务 中标 项目",
+    "工业园区 污水",
+    "化工废水 处理",
+    "制药废水 处理",
+    "废水治理 工程",
     "排放标准 生态环境部",
     "水污染防治",
-    "再生水 水务",
-    "污泥处理",
-    # 备选关键词（更广覆盖，增加命中率）
-    "环保工程",
-    "水环境 治理",
-    "污水处理厂",
-    "流域 生态修复",
+    "环保 水处理 技术",
+    "污泥处理 处置",
+    "再生水 工业",
+    "工业用水 节水",
 ]
 
 # 相关性过滤关键词（标题或摘要中包含才算相关）
@@ -47,6 +47,9 @@ RELEVANT_KEYWORDS = [
     '排放标准', '水务', '膜技术', '脱硫', '污泥', '再生水',
     '黑臭水体', '工业园区', '海水淡化', '饮用水', '水污染',
     '水环境', '污水处理厂', '给水', '排水',
+    '工业废水', '工业污水', '工业用水', '化工废水', '制药废水',
+    '电镀废水', '印染废水', '焦化废水', '矿井水',
+    '中水回用', '废水回用', '蒸发结晶', '反渗透',
     # 英文关键词（新加坡等国际新闻）
     'water', 'wastewater', 'treatment', 'desalination', 'recycling',
     'environment', 'pollution', 'emission', 'sustainability', 'seawater',
@@ -121,6 +124,29 @@ SINGAPORE_KEYWORDS = [
 # 跳过的域名（JS渲染/反爬/内容质量差）
 SKIP_DOMAINS = ['msn.com', 'msn.cn', 'investing.com', 'bing.com']
 
+# 工业废水/工业水处理关键词（命中优先选择）
+INDUSTRIAL_KEYWORDS = [
+    '工业废水', '工业污水', '工业用水', '工业水', '工业园区',
+    '化工废水', '制药废水', '电镀废水', '印染废水', '造纸废水',
+    '焦化废水', '农药废水', '冶炼废水', '矿井水',
+    '零排放', '零液排放', '中水回用', '废水回用',
+    '废水处理工程', '污水处理工程', '水处理项目',
+    '高盐废水', '高浓度废水', '含油废水', '含磷废水',
+    '脱硫废水', '浓盐水', '蒸发结晶', 'MVR', 'MBR',
+    'COD降解', '氨氮去除', '膜处理', '反渗透',
+    '中标', 'EPC', '总承包', '运维',
+]
+
+# 纯市政新闻关键词（命中则降低优先级，但不直接排除）
+# 只有标题+摘要全部是市政内容、不含任何工业关键词时才排除
+MUNICIPAL_KEYWORDS = [
+    '市政污水', '城镇污水', '城市污水处理', '农村污水',
+    '污水处理厂投运', '污水处理厂通水', '管网改造', '管网更新',
+    '黑臭水体', '河长制', '断面水质', '国考断面',
+    '提标改造', '准四类', '雨污分流', '排水管网',
+    '自来水', '饮用水水源', '供水',
+]
+
 # 垃圾文本模式（trafilatura可能提取到的跳转/加载页面文本）
 JUNK_PATTERNS = [
     '正在访问', '正在跳转', '正在加载', '访问网站', '访问原网',
@@ -131,6 +157,10 @@ JUNK_PATTERNS = [
     '仅打印内容', '相关阅读推荐', '您可能对以下文章感兴趣',
     '温馨提示', '您访问的链接即将离开', '是否继续',
     '字号：', '打印', '分享到', '收藏', '返回顶部',
+    # 广告/推广文本
+    '进口KNC', '脑益莱', 'BRARELIV', '细胞养脑', '健忘用脑',
+    '限时抢购', '立即下单', '点击购买', '免费领取', '优惠券',
+    '扫码下载', '下载APP', '关注公众号', '扫码关注',
 ]
 
 # 选取新闻条数
@@ -235,6 +265,11 @@ def clean_content(content, title=''):
         if pattern in content:
             print(f"    [clean] 检测到垃圾文本 [{pattern}]，丢弃内容")
             return None
+    # 验证正文是否包含水处理/环保行业关键词（排除广告/无关内容）
+    has_industry_kw = any(kw in content for kw in WATER_KEYWORDS)
+    if not has_industry_kw:
+        print(f"    [clean] 正文不含行业关键词，疑似广告/无关内容，丢弃")
+        return None
     # 检查内容与标题的相关性（至少共享2个中文词）
     if title:
         title_chars = set(re.findall(r'[\u4e00-\u9fff]', title))
@@ -632,6 +667,7 @@ def filter_relevant(articles):
     """过滤相关新闻（排除台湾省新闻）"""
     relevant = []
     taiwan_excluded = 0
+    municipal_excluded = 0
     for a in articles:
         # 新加坡来源已预先过滤，直接通过
         if a.get('_singapore'):
@@ -648,9 +684,17 @@ def filter_relevant(articles):
             taiwan_excluded += 1
             continue
         if any(kw in text for kw in RELEVANT_KEYWORDS):
+            # 排除纯市政新闻：标题+摘要不含工业关键词但含市政关键词
+            has_industrial = any(kw in text for kw in INDUSTRIAL_KEYWORDS)
+            has_municipal = any(kw in text for kw in MUNICIPAL_KEYWORDS)
+            if has_municipal and not has_industrial:
+                municipal_excluded += 1
+                continue
             relevant.append(a)
     if taiwan_excluded:
         print(f"  排除台湾省新闻: {taiwan_excluded}条")
+    if municipal_excluded:
+        print(f"  排除纯市政新闻: {municipal_excluded}条")
     return relevant
 
 
@@ -725,6 +769,7 @@ def tag_article(article):
 def select_news(articles, count=6):
     """选择最重要的N条新闻，保证分类多样性
     - 泓济官网新闻优先入选（公司动态）
+    - 工业废水相关新闻优先入选
     - 新加坡新闻最多保留1条
     """
     # 排序：新到旧
@@ -734,17 +779,20 @@ def select_news(articles, count=6):
     for a in articles:
         a['tag'] = tag_article(a)
 
-    # 分区：泓济官网优先 → 大陆新闻 → 新加坡限1条
+    # 分区：泓济官网优先 → 工业新闻 → 非工业大陆新闻 → 新加坡限1条
     honess = []
-    mainland = []
+    industrial = []
+    other_mainland = []
     singapore = []
     for a in articles:
         if a.get('_honess'):
             honess.append(a)
         elif any(kw in (a['title'] + ' ' + a['summary']) for kw in SINGAPORE_KEYWORDS):
             singapore.append(a)
+        elif any(kw in (a['title'] + ' ' + a['summary']) for kw in INDUSTRIAL_KEYWORDS):
+            industrial.append(a)
         else:
-            mainland.append(a)
+            other_mainland.append(a)
 
     # 新加坡最多保留1条
     singapore = singapore[:1]
@@ -753,9 +801,11 @@ def select_news(articles, count=6):
 
     if honess:
         print(f"  泓济官网新闻: {len(honess)}条（优先入选）")
+    if industrial:
+        print(f"  工业相关新闻: {len(industrial)}条（优先入选）")
 
-    # 合并：泓济官网 → 大陆 → 新加坡(1条)
-    prioritized = honess + mainland + singapore
+    # 合并：泓济官网 → 工业新闻 → 非工业大陆 → 新加坡(1条)
+    prioritized = honess + industrial + other_mainland + singapore
 
     # 按分类限制数量
     selected = []
