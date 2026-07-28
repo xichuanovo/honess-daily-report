@@ -383,7 +383,6 @@ def fetch_rss(query):
         for idx, entry in enumerate(feed.entries[:10]):
             title = entry.title if hasattr(entry, 'title') else ''
             link = entry.link if hasattr(entry, 'link') else ''
-            # Google News 链接保持原样，在步骤1.5正文提取阶段通过HTTP重定向解析真实URL
 
             # 来源
             source = ''
@@ -392,7 +391,7 @@ def fetch_rss(query):
             elif hasattr(entry, 'author'):
                 source = entry.author
 
-            # 摘要
+            # 摘要 — Google News RSS的summary就是文章前几段文字
             summary = ''
             if hasattr(entry, 'summary'):
                 summary = re.sub(r'<[^>]+>', '', entry.summary).strip()
@@ -406,7 +405,8 @@ def fetch_rss(query):
                 'source': source.strip(),
                 'link': link,
                 'summary': summary,
-                'content': None,
+                # Google News 链接无法直接提取正文(JS渲染)，用RSS summary作为初始正文
+                'content': summary if is_google_news_link(link) and len(summary) > 50 else None,
                 'published': published,
                 'published_parsed': published_parsed,
             })
@@ -1235,75 +1235,12 @@ def main():
             print(f"  [{i+1}/{len(news)}] 已有正文: {n['title'][:30]}...")
             continue
         link = n.get('link', '')
-        # Google News 链接：直接请求让 requests 跟随重定向，获取真实 URL 和内容
         if is_google_news_link(link):
-            print(f"  [{i+1}/{len(news)}] 解析Google News链接: {n['title'][:30]}...")
-            try:
-                resp = req_lib.get(link, timeout=15, allow_redirects=True, headers={
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-                })
-                final_url = resp.url
-                # 如果重定向到了真实文章页面（不再是 Google News）
-                if not is_google_news_link(final_url):
-                    link = final_url
-                    n['link'] = link
-                    content = traf_extract(resp.content, include_comments=False, include_tables=False)
-                    n['content'] = clean_content(content, n.get('title', ''))
-                    print(f"    -> 已解析(重定向): {link[:60]}")
-                else:
-                    # Google News 返回HTML页面，从中提取真实文章URL
-                    html = resp.text
-                    real_url = None
-                    # 模式1: <link rel="canonical" href="REAL_URL">
-                    m = re.search(r'<link\s+rel="canonical"\s+href="([^"]+)"', html)
-                    if m and not is_google_news_link(m.group(1)):
-                        real_url = m.group(1)
-                    # 模式2: data-n-au="REAL_URL"
-                    if not real_url:
-                        m = re.search(r'data-n-au="([^"]+)"', html)
-                        if m and not is_google_news_link(m.group(1)):
-                            real_url = m.group(1)
-                    # 模式3: <meta property="og:url" content="REAL_URL">
-                    if not real_url:
-                        m = re.search(r'<meta\s+property="og:url"\s+content="([^"]+)"', html)
-                        if m and not is_google_news_link(m.group(1)):
-                            real_url = m.group(1)
-                    # 模式4: 搜索JSON数据中的 "au":"REAL_URL"
-                    if not real_url:
-                        m = re.search(r'"au":"([^"]+)"', html)
-                        if m and not is_google_news_link(m.group(1)):
-                            real_url = m.group(1).replace('\\/', '/')
-                    # 模式5: 用source域名在HTML中搜索完整文章URL
-                    if not real_url and n.get('source'):
-                        source_domain = n['source']
-                        # 从source字段提取域名部分
-                        if '.' in source_domain:
-                            # 搜索HTML中包含该域名的URL
-                            pattern = rf'https?://[^\s"\'<>]*{re.escape(source_domain)}[^\s"\'<>]*'
-                            m = re.search(pattern, html)
-                            if m:
-                                real_url = m.group(0).rstrip('.,;')
-                    if real_url and not is_google_news_link(real_url):
-                        link = real_url
-                        n['link'] = link
-                        real_url2, content = fetch_page_content(link)
-                        n['content'] = clean_content(content, n.get('title', ''))
-                        print(f"    -> 已解析(HTML): {link[:60]}")
-                    else:
-                        # 搜索HTML中所有非Google的URL（调试用）
-                        all_urls = re.findall(r'https?://[^\s"\'<>\\]+', html)
-                        external_urls = [u for u in all_urls if not any(d in u for d in ['google.com', 'gstatic.com', 'googleapis.com', 'gdt.qq.com'])]
-                        if external_urls:
-                            print(f"    -> HTML中的外部URL: {external_urls[:5]}")
-                        else:
-                            print(f"    -> 解析失败 (HTTP {resp.status_code})")
-            except Exception as e:
-                print(f"    -> 请求失败: {e}")
-            except Exception as e:
-                print(f"    -> 请求失败: {e}")
-        elif link and not is_google_news_link(link):
+            # Google News 是 JS SPA，requests 无法解析真实 URL
+            # fetch_rss 已设置 RSS summary 作为兜底正文，此处跳过
+            print(f"  [{i+1}/{len(news)}] 跳过(Google News): {n['title'][:30]}...")
+            continue
+        if link:
             print(f"  [{i+1}/{len(news)}] 抓取: {n['title'][:30]}...")
             real_url, content = fetch_page_content(link)
             n['link'] = real_url
