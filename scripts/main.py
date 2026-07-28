@@ -77,6 +77,9 @@ EXCLUDE_KEYWORDS = [
     '省委书记', '常委会', '重要讲话', '主持会议', '讲话精神',
     '传达学习', '指示精神', '党组', '纪委监委', '巡视',
     '干部大会', '主题教育', '党建', '干部培训',
+    # 广告/推广/排行榜类
+    '一览表', '排行榜', '龙头企业榜', '评价高', '性能优',
+    '选高效', '哪家好', '多少钱', '价格表', '批发',
 ]
 
 # 台湾省相关关键词（直接排除，不收录台湾新闻，含繁体字）
@@ -266,10 +269,13 @@ def clean_content(content, title=''):
             print(f"    [clean] 检测到垃圾文本 [{pattern}]，丢弃内容")
             return None
     # 验证正文是否包含水处理/环保行业关键词（排除广告/无关内容）
-    has_industry_kw = any(kw in content for kw in WATER_KEYWORDS)
-    if not has_industry_kw:
-        print(f"    [clean] 正文不含行业关键词，疑似广告/无关内容，丢弃")
-        return None
+    # 使用 RELEVANT_KEYWORDS（更宽泛），且标题已含行业词时跳过检查
+    title_has_kw = title and any(kw in title for kw in RELEVANT_KEYWORDS)
+    if not title_has_kw:
+        has_industry_kw = any(kw in content for kw in RELEVANT_KEYWORDS)
+        if not has_industry_kw:
+            print(f"    [clean] 正文不含行业关键词，疑似广告/无关内容，丢弃")
+            return None
     # 检查内容与标题的相关性（至少共享2个中文词）
     if title:
         title_chars = set(re.findall(r'[\u4e00-\u9fff]', title))
@@ -297,7 +303,8 @@ def clean_content(content, title=''):
 
 
 def fetch_page_content(url):
-    """抓取指定 URL 页面的正文内容，返回 (url, content)"""
+    """抓取指定 URL 页面的正文内容，返回 (url, content)
+    注意：返回原始 URL 而非重定向后的 URL，避免站点重定向到首页覆盖文章链接"""
     if should_skip_url(url):
         print(f"    [skip] 跳过域名: {url[:60]}")
         return url, None
@@ -308,7 +315,8 @@ def fetch_page_content(url):
         resp = req_lib.get(url, timeout=15, headers=headers, allow_redirects=True)
         # 传入原始字节让 trafilatura 自动检测编码（解决 GBK/GB2312 乱码问题）
         content = traf_extract(resp.content, include_comments=False, include_tables=False)
-        return resp.url, content
+        # 返回原始 URL，不用 resp.url（部分站点会重定向到首页）
+        return url, content
     except Exception as e:
         print(f"    [fetch] 失败: {e}")
         return url, None
@@ -682,6 +690,9 @@ def filter_relevant(articles):
         # 排除台湾省新闻（标题+摘要+URL三重检查）
         if any(kw in text for kw in TAIWAN_KEYWORDS) or any(kw in link_lower for kw in TAIWAN_URL_KEYWORDS):
             taiwan_excluded += 1
+            continue
+        # 排除广告/排行榜类内容
+        if any(kw in text for kw in EXCLUDE_KEYWORDS):
             continue
         if any(kw in text for kw in RELEVANT_KEYWORDS):
             # 排除纯市政新闻：标题+摘要不含工业关键词但含市政关键词
