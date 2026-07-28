@@ -1235,13 +1235,41 @@ def main():
             print(f"  [{i+1}/{len(news)}] 已有正文: {n['title'][:30]}...")
             continue
         link = n.get('link', '')
-        # Google News 链接需要再次尝试解析（fetch_rss中可能未成功）
+        # Google News 链接：直接请求让 requests 跟随重定向，获取真实 URL 和内容
         if is_google_news_link(link):
-            resolved = resolve_google_news_url(link)
-            if not is_google_news_link(resolved):
-                link = resolved
-                n['link'] = link
-        if link and not is_google_news_link(link):
+            print(f"  [{i+1}/{len(news)}] 解析Google News链接: {n['title'][:30]}...")
+            try:
+                resp = req_lib.get(link, timeout=15, allow_redirects=True, headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                })
+                final_url = resp.url
+                # 如果重定向到了真实文章页面（不再是 Google News）
+                if not is_google_news_link(final_url):
+                    link = final_url
+                    n['link'] = link
+                    content = traf_extract(resp.content, include_comments=False, include_tables=False)
+                    n['content'] = clean_content(content, n.get('title', ''))
+                    print(f"    -> 已解析: {link[:60]}")
+                else:
+                    # 重定向仍停在 Google News，尝试从 HTML 中提取真实 URL
+                    html = resp.text
+                    # 常见模式: <meta http-equiv="refresh" content="0;url=REAL_URL">
+                    meta_match = re.search(r'<meta[^>]+refresh[^>]+url=([^"\'>\s]+)', html, re.I)
+                    if meta_match:
+                        real_url = meta_match.group(1)
+                        if not is_google_news_link(real_url):
+                            link = real_url
+                            n['link'] = link
+                            real_url2, content = fetch_page_content(link)
+                            n['content'] = clean_content(content, n.get('title', ''))
+                            print(f"    -> meta跳转: {link[:60]}")
+                    else:
+                        print(f"    -> 解析失败")
+            except Exception as e:
+                print(f"    -> 请求失败: {e}")
+        elif link and not is_google_news_link(link):
             print(f"  [{i+1}/{len(news)}] 抓取: {n['title'][:30]}...")
             real_url, content = fetch_page_content(link)
             n['link'] = real_url
