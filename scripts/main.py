@@ -1245,6 +1245,8 @@ def main():
                     'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
                 })
                 final_url = resp.url
+                # 调试日志：查看Google News返回的内容
+                print(f"    HTTP {resp.status_code}, URL: {final_url[:80]}")
                 # 如果重定向到了真实文章页面（不再是 Google News）
                 if not is_google_news_link(final_url):
                     link = final_url
@@ -1254,8 +1256,8 @@ def main():
                     print(f"    -> 已解析: {link[:60]}")
                 else:
                     # 重定向仍停在 Google News，尝试从 HTML 中提取真实 URL
-                    html = resp.text
-                    # 常见模式: <meta http-equiv="refresh" content="0;url=REAL_URL">
+                    html = resp.text[:5000]
+                    # 常见模式1: <meta http-equiv="refresh" content="0;url=REAL_URL">
                     meta_match = re.search(r'<meta[^>]+refresh[^>]+url=([^"\'>\s]+)', html, re.I)
                     if meta_match:
                         real_url = meta_match.group(1)
@@ -1266,7 +1268,36 @@ def main():
                             n['content'] = clean_content(content, n.get('title', ''))
                             print(f"    -> meta跳转: {link[:60]}")
                     else:
-                        print(f"    -> 解析失败")
+                        # 常见模式2: data-n-au="REAL_URL" 属性
+                        au_match = re.search(r'data-n-au="([^"]+)"', html)
+                        if au_match:
+                            real_url = au_match.group(1)
+                            if not is_google_news_link(real_url):
+                                link = real_url
+                                n['link'] = link
+                                real_url2, content = fetch_page_content(link)
+                                n['content'] = clean_content(content, n.get('title', ''))
+                                print(f"    -> data-n-au: {link[:60]}")
+                            else:
+                                print(f"    -> 解析失败 (data-n-au仍是Google News)")
+                        else:
+                            # 常见模式3: JavaScript redirect
+                            js_match = re.search(r'window\.location\s*[=:]\s*["\']([^"\']+)["\']', html)
+                            if js_match:
+                                real_url = js_match.group(1)
+                                if not is_google_news_link(real_url):
+                                    link = real_url
+                                    n['link'] = link
+                                    real_url2, content = fetch_page_content(link)
+                                    n['content'] = clean_content(content, n.get('title', ''))
+                                    print(f"    -> JS跳转: {link[:60]}")
+                                else:
+                                    print(f"    -> 解析失败 (JS仍是Google News)")
+                            else:
+                                # 打印HTML前200字符用于调试
+                                print(f"    -> 解析失败, HTML: {html[:200]}")
+            except Exception as e:
+                print(f"    -> 请求失败: {e}")
             except Exception as e:
                 print(f"    -> 请求失败: {e}")
         elif link and not is_google_news_link(link):
