@@ -183,32 +183,32 @@ def is_google_news_link(url):
 
 def resolve_google_news_url(url):
     """从 Google News 重定向 URL 中提取真实文章 URL
-    Google News URL 格式: /articles/CBMi<base64>...
-    base64 解码后包含真实文章链接"""
+    方法1: base64 解码后在 bytes 中搜索 URL（Google News article ID 是 protobuf 编码）
+    方法2: HTTP 重定向跟随"""
     if not url or 'news.google.com' not in url:
         return url
-    # 方法1: 尝试从 base64 编码中解码真实 URL
+    # 方法1: base64 解码后在原始 bytes 中搜索 URL
     try:
         if '/articles/' in url:
             article_id = url.split('/articles/')[1].split('?')[0]
-            # 补全 base64 padding
             padding = 4 - len(article_id) % 4
             if padding < 4:
                 article_id += '=' * padding
             decoded = base64.urlsafe_b64decode(article_id)
-            decoded_str = decoded.decode('utf-8', errors='ignore')
-            # 在解码后的数据中搜索 URL
-            match = re.search(r'https?://[^\x00-\x1f\x7f<>"]+', decoded_str)
+            # 在 bytes 中搜索 URL（protobuf 数据中 URL 是连续的 UTF-8 字符串）
+            match = re.search(rb'https?://[^\x00-\x1f\x7f<>"\s]+', decoded)
             if match:
-                real_url = match.group(0).rstrip()
-                if 'news.google.com' not in real_url:
+                real_url = match.group(0).decode('utf-8', errors='ignore').rstrip()
+                if 'news.google.com' not in real_url and len(real_url) > 20:
                     return real_url
     except Exception:
         pass
-    # 方法2: 尝试跟随 HTTP 重定向
+    # 方法2: HTTP 重定向跟随（在 GitHub Actions 美国服务器上可用）
     try:
-        resp = req_lib.get(url, timeout=5, allow_redirects=True, headers={
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        resp = req_lib.get(url, timeout=10, allow_redirects=True, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
         })
         final_url = resp.url
         if final_url and 'news.google.com' not in final_url:
@@ -324,19 +324,18 @@ def fetch_page_content(url):
 
 def parse_google_news_source_urls(rss_text):
     """从 Google News RSS XML 中提取 <source url="..."> 属性
-    Google News RSS 每个 <item> 包含 <source url="真实文章URL">来源名</source>
-    这是获取真实文章 URL 最可靠的方法，无需 HTTP 重定向或 base64 解码"""
+    注意: <source url> 包含的是发布者域名（如 https://news.hfut.edu.cn），
+    不是文章 URL。仅用于获取来源信息，不用于替换文章链接。"""
     source_map = {}
     try:
         root = ET.fromstring(rss_text)
-        # RSS 2.0: /rss/channel/item
         for item in root.findall('.//item'):
             link_elem = item.find('link')
             source_elem = item.find('source')
             if link_elem is not None and source_elem is not None:
                 link = (link_elem.text or '').strip()
                 source_url = (source_elem.get('url') or '').strip()
-                if source_url and link and is_google_news_link(link):
+                if source_url and link:
                     source_map[link] = source_url
     except Exception as e:
         print(f"  [source_url] XML 解析失败: {e}")
@@ -380,24 +379,11 @@ def fetch_rss(query):
     if not feed or not feed.entries:
         return []
     try:
-        # 从 RSS XML 中提取 <source url="..."> 获取真实文章 URL（最可靠方法）
-        source_urls = parse_google_news_source_urls(resp.text)
-        resolved_count = 0
         articles = []
         for idx, entry in enumerate(feed.entries[:10]):
             title = entry.title if hasattr(entry, 'title') else ''
             link = entry.link if hasattr(entry, 'link') else ''
-
-            # 优先使用 <source url> 获取真实链接
-            if is_google_news_link(link) and link in source_urls:
-                link = source_urls[link]
-                resolved_count += 1
-            # 后备：base64 解码
-            elif is_google_news_link(link):
-                resolved = resolve_google_news_url(link)
-                if not is_google_news_link(resolved):
-                    link = resolved
-                    resolved_count += 1
+            # Google News 链接保持原样，在步骤1.5正文提取阶段通过HTTP重定向解析真实URL
 
             # 来源
             source = ''
@@ -424,8 +410,6 @@ def fetch_rss(query):
                 'published': published,
                 'published_parsed': published_parsed,
             })
-        if resolved_count > 0:
-            print(f"  [{query}] URL 解析成功: {resolved_count}/{min(len(feed.entries), 10)} 篇")
         return articles
     except Exception as e:
         print(f"  Google News RSS 解析失败 [{query}]: {e}")
