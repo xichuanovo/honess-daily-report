@@ -11,6 +11,7 @@ import smtplib
 import os
 import re
 import time
+import base64
 import urllib.parse
 import requests as req_lib
 from email.mime.text import MIMEText
@@ -147,11 +148,32 @@ def is_google_news_link(url):
 
 
 def resolve_google_news_url(url):
-    """跟随 Google News 重定向获取真实文章 URL"""
+    """从 Google News 重定向 URL 中提取真实文章 URL
+    Google News URL 格式: /articles/CBMi<base64>...
+    base64 解码后包含真实文章链接"""
     if not url or 'news.google.com' not in url:
         return url
+    # 方法1: 尝试从 base64 编码中解码真实 URL
     try:
-        resp = req_lib.get(url, timeout=8, allow_redirects=True, headers={
+        if '/articles/' in url:
+            article_id = url.split('/articles/')[1].split('?')[0]
+            # 补全 base64 padding
+            padding = 4 - len(article_id) % 4
+            if padding < 4:
+                article_id += '=' * padding
+            decoded = base64.urlsafe_b64decode(article_id)
+            decoded_str = decoded.decode('utf-8', errors='ignore')
+            # 在解码后的数据中搜索 URL
+            match = re.search(r'https?://[^\x00-\x1f\x7f<>"]+', decoded_str)
+            if match:
+                real_url = match.group(0).rstrip()
+                if 'news.google.com' not in real_url:
+                    return real_url
+    except Exception:
+        pass
+    # 方法2: 尝试跟随 HTTP 重定向
+    try:
+        resp = req_lib.get(url, timeout=5, allow_redirects=True, headers={
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         })
         final_url = resp.url
@@ -634,8 +656,8 @@ def filter_recent(articles, days=14):
 
 
 def filter_valid_links(articles):
-    """过滤掉链接无效的文章（MSN/Google News等跳过域名，且无正文）
-    确保最终展示的新闻都有可访问的原文链接"""
+    """过滤掉链接无效的文章（MSN等跳过域名，且无正文）
+    Google News 链接保留（URL已在fetch_rss中解析，解析失败的在正文提取阶段处理）"""
     valid = []
     removed = 0
     for a in articles:
@@ -644,10 +666,13 @@ def filter_valid_links(articles):
         if is_valid_link(link) or content:
             # 有效链接 或 已有正文的文章 保留
             valid.append(a)
+        elif is_google_news_link(link):
+            # Google News 链接暂且保留（URL解析可能部分失败，后续正文提取会处理）
+            valid.append(a)
         else:
             removed += 1
     if removed:
-        print(f"  过滤无效链接: 移除 {removed} 篇（MSN/Google News等）")
+        print(f"  过滤无效链接: 移除 {removed} 篇（MSN/Bing等）")
     return valid
 
 
@@ -1132,6 +1157,12 @@ def main():
             print(f"  [{i+1}/{len(news)}] 已有正文: {n['title'][:30]}...")
             continue
         link = n.get('link', '')
+        # Google News 链接需要再次尝试解析（fetch_rss中可能未成功）
+        if is_google_news_link(link):
+            resolved = resolve_google_news_url(link)
+            if not is_google_news_link(resolved):
+                link = resolved
+                n['link'] = link
         if link and not is_google_news_link(link):
             print(f"  [{i+1}/{len(news)}] 抓取: {n['title'][:30]}...")
             real_url, content = fetch_page_content(link)
