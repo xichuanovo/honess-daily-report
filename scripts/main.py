@@ -848,7 +848,7 @@ def generate_html(news, policies):
             n.get('title', ''),
             n.get('content'),
             n.get('summary')
-        )[:200]
+        )[:300]
 
     briefs_raw = news[4:] if len(news) > 4 else []
     briefs = []
@@ -918,7 +918,7 @@ def save_news_json(news, policies):
             'time': time_str,
             'tag': n.get('tag', '市场'),
             'url': n.get('link', '') if is_valid_link(n.get('link', '')) else '',
-            'content': (n.get('content') or '')[:300],
+            'content': (n.get('content') or '')[:500],
         })
 
     law_items = []
@@ -944,7 +944,7 @@ def save_news_json(news, policies):
             'date': date_str,
             'status': p.get('status', '新发布'),
             'url': p.get('link', '') if is_valid_link(p.get('link', '')) else '',
-            'content': (p.get('content') or '')[:300],
+            'content': (p.get('content') or '')[:500],
         })
 
     data = {
@@ -961,8 +961,49 @@ def save_news_json(news, policies):
 
 # ==================== 邮件发送 ====================
 
-def send_emails(html, subscribers):
-    """通过 SMTP 发送邮件"""
+def generate_text_version(news, policies):
+    """生成纯文本版本的日报（用于反垃圾邮件）"""
+    now = datetime.utcnow() + timedelta(hours=8)
+    lines = []
+    lines.append(f"泓济环保·行业日报 {now.strftime('%Y年%m月%d日')}")
+    lines.append("=" * 40)
+    lines.append("")
+
+    # 新闻
+    lines.append(f"【行业资讯】共{len(news)}条")
+    lines.append("-" * 40)
+    for i, n in enumerate(news):
+        lines.append(f"\n{i+1}. [{n.get('tag', '市场')}] {n.get('title', '')}")
+        content = n.get('content') or n.get('summary') or ''
+        if content:
+            lines.append(content[:300])
+        link = n.get('link', '')
+        if link and is_valid_link(link):
+            lines.append(f"原文链接: {link}")
+        lines.append("")
+
+    # 法规
+    lines.append(f"【政策法规】共{len(policies)}条")
+    lines.append("-" * 40)
+    for i, p in enumerate(policies):
+        lines.append(f"\n{i+1}. [{p.get('status', '新发布')}] {p.get('title', '')}")
+        content = p.get('content') or ''
+        if content:
+            lines.append(content[:200])
+        link = p.get('link', '')
+        if link and is_valid_link(link):
+            lines.append(f"原文链接: {link}")
+        lines.append("")
+
+    lines.append("-" * 40)
+    lines.append("本日报由泓济环保行业日报系统自动生成")
+    lines.append("Powered by GitHub Actions")
+
+    return '\n'.join(lines)
+
+
+def send_emails(html, text_body, subscribers):
+    """通过 SMTP 发送邮件（HTML + 纯文本双版本，降低垃圾邮件风险）"""
     smtp_host = os.environ.get('SMTP_HOST', 'smtp.qq.com')
     smtp_port = int(os.environ.get('SMTP_PORT', '465'))
     smtp_user = os.environ.get('SMTP_USER', '')
@@ -986,6 +1027,8 @@ def send_emails(html, subscribers):
             msg['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click'
             msg['X-Mailer'] = 'HonessDailyReport/1.0'
             msg['Auto-Submitted'] = 'auto-generated'
+            # 纯文本版本必须在前，HTML在后（MIME标准要求）
+            msg.attach(MIMEText(text_body, 'plain', 'utf-8'))
             msg.attach(MIMEText(html, 'html', 'utf-8'))
 
             with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=30) as server:
@@ -1138,10 +1181,14 @@ def main():
     policies = deduplicate_cross_section(news, policies)
     print(f"  法规: {before_count} -> {len(policies)} 条")
 
-    # 3. 生成 HTML
+    # 3. 生成 HTML 和纯文本
     print("\n[3/6] 生成日报HTML...")
     html = generate_html(news, policies)
     print(f"  HTML 长度: {len(html)} 字符")
+
+    # 生成纯文本版本（降低垃圾邮件风险）
+    text_body = generate_text_version(news, policies)
+    print(f"  纯文本长度: {len(text_body)} 字符")
 
     # 保存 HTML 副本（用于 GitHub Actions artifact）
     with open('daily-report.html', 'w', encoding='utf-8') as f:
@@ -1167,7 +1214,7 @@ def main():
 
     # 6. 发送邮件
     print("\n[6/6] 发送邮件...")
-    results = send_emails(html, subscribers)
+    results = send_emails(html, text_body, subscribers)
 
     # 汇总
     success = sum(1 for _, ok, _ in results if ok)

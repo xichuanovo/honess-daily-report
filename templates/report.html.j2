@@ -142,7 +142,11 @@ body{background:#e8e4d8;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",
     {% if featured %}
     <div class="featured">
       <div class="kicker">&#9733; 头版头条</div>
+      {% if featured.has_valid_link and featured.link %}
+      <h1><a href="{{ featured.link }}" target="_blank" rel="noopener noreferrer" style="color:#0d0d0d;text-decoration:none;">{{ featured.title }}</a></h1>
+      {% else %}
       <h1>{{ featured.title }}</h1>
+      {% endif %}
       {% if featured.display_text %}
       <div class="deck">{{ featured.display_text[:150] }}{% if featured.display_text|length > 150 %}...{% endif %}</div>
       {% endif %}
@@ -163,10 +167,14 @@ body{background:#e8e4d8;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",
     <div class="two-col">
       {% for story in two_col_news %}
       <div class="story">
+        {% if story.has_valid_link and story.link %}
+        <h3><a href="{{ story.link }}" target="_blank" rel="noopener noreferrer" style="color:#0d0d0d;text-decoration:none;">{{ story.title }}</a></h3>
+        {% else %}
         <h3>{{ story.title }}</h3>
+        {% endif %}
         <div class="meta">{{ story.tag }} · {{ story.source or '网络综合' }} · {{ story.date_short }}</div>
         {% if story.display_text %}
-        <p>{{ story.display_text[:200] }}{% if story.display_text|length > 200 %}...{% endif %}</p>
+        <p>{{ story.display_text[:300] }}{% if story.display_text|length > 300 %}...{% endif %}</p>
         {% else %}
         <p style="color:#999;font-style:italic;">点击标题查看详情</p>
         {% endif %}
