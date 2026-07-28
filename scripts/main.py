@@ -246,7 +246,7 @@ def should_skip_url(url):
 
 def is_valid_link(url):
     """检查 URL 是否适合在邮件中展示为'查看原文'链接"""
-    if not url or is_google_news_link(url):
+    if not url:
         return False
     url_lower = url.lower()
     for domain in SKIP_DOMAINS:
@@ -406,7 +406,7 @@ def fetch_rss(query):
                 'link': link,
                 'summary': summary,
                 # Google News 链接无法直接提取正文(JS渲染)，用RSS summary作为初始正文
-                'content': summary if is_google_news_link(link) and len(summary) > 50 else None,
+                'content': summary if is_google_news_link(link) and len(summary) > 20 else None,
                 'published': published,
                 'published_parsed': published_parsed,
             })
@@ -1064,7 +1064,7 @@ def save_news_json(news, policies):
             'source': n.get('source', ''),
             'time': time_str,
             'tag': n.get('tag', '市场'),
-            'url': n.get('link', '') if is_valid_link(n.get('link', '')) else '',
+            'url': n.get('link', ''),
             'content': (n.get('content') or '')[:500],
         })
 
