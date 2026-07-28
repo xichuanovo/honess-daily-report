@@ -1292,7 +1292,13 @@ def main():
                         n['content'] = clean_content(content, n.get('title', ''))
                         print(f"    -> 已解析(HTML): {link[:60]}")
                     else:
-                        print(f"    -> 解析失败 (HTTP {resp.status_code})")
+                        # 搜索HTML中所有非Google的URL（调试用）
+                        all_urls = re.findall(r'https?://[^\s"\'<>\\]+', html)
+                        external_urls = [u for u in all_urls if not any(d in u for d in ['google.com', 'gstatic.com', 'googleapis.com', 'gdt.qq.com'])]
+                        if external_urls:
+                            print(f"    -> HTML中的外部URL: {external_urls[:5]}")
+                        else:
+                            print(f"    -> 解析失败 (HTTP {resp.status_code})")
             except Exception as e:
                 print(f"    -> 请求失败: {e}")
             except Exception as e:
