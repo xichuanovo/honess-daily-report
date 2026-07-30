@@ -1,8 +1,8 @@
 name: 泓济环保行业日报
 on:
   schedule:
-    # UTC 00:00 = 北京时间 08:00
-    - cron: '0 0 * * *'
+    # UTC 14:00 = 北京时间 22:00（GitHub Actions cron 常延迟 ~10h，实际约北京 08:00 发出）
+    - cron: '0 14 * * *'
   # 允许手动触发（用于测试）
   workflow_dispatch:
 
