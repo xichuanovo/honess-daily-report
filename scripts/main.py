@@ -184,7 +184,8 @@ def is_google_news_link(url):
 def resolve_google_news_url(url):
     """从 Google News 重定向 URL 中提取真实文章 URL
     方法1: base64 解码后在 bytes 中搜索 URL（Google News article ID 是 protobuf 编码）
-    方法2: HTTP 重定向跟随"""
+    方法2: HTTP 重定向跟随
+    方法3: Playwright 无头浏览器（最可靠，能执行 JS 跳转）"""
     if not url or 'news.google.com' not in url:
         return url
     # 方法1: base64 解码后在原始 bytes 中搜索 URL
@@ -215,6 +216,23 @@ def resolve_google_news_url(url):
             return final_url
     except Exception:
         pass
+    # 方法3: Playwright 无头浏览器（能执行 JavaScript 跳转）
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.goto(url, timeout=20000, wait_until='domcontentloaded')
+            # 等待 JS 跳转完成
+            page.wait_for_timeout(3000)
+            final_url = page.url
+            browser.close()
+            if final_url and 'news.google.com' not in final_url:
+                return final_url
+    except ImportError:
+        print("    [playwright] 未安装，跳过")
+    except Exception as e:
+        print(f"    [playwright] 解析失败: {e}")
     return url
 
 
@@ -247,6 +265,9 @@ def should_skip_url(url):
 def is_valid_link(url):
     """检查 URL 是否适合在邮件中展示为'查看原文'链接"""
     if not url:
+        return False
+    # Google News 链接国内无法访问，不展示为"查看原文"
+    if is_google_news_link(url):
         return False
     url_lower = url.lower()
     for domain in SKIP_DOMAINS:
@@ -1231,14 +1252,30 @@ def main():
     # 1.5 对选中新闻补充抓取原文（仅对尚未提取正文的条目）
     print("\n[1.5/6] 抓取新闻原文...")
     for i, n in enumerate(news):
-        if n.get('content'):
+        if n.get('content') and len(n.get('content', '')) > 100:
+            # 已有充足正文（>100字），跳过
             print(f"  [{i+1}/{len(news)}] 已有正文: {n['title'][:30]}...")
             continue
         link = n.get('link', '')
         if is_google_news_link(link):
-            # Google News 是 JS SPA，requests 无法解析真实 URL
-            # fetch_rss 已设置 RSS summary 作为兜底正文，此处跳过
-            print(f"  [{i+1}/{len(news)}] 跳过(Google News): {n['title'][:30]}...")
+            # Google News 链接：用 Playwright 解析真实 URL，然后抓取正文
+            print(f"  [{i+1}/{len(news)}] 解析Google News: {n['title'][:30]}...")
+            real_url = resolve_google_news_url(link)
+            if real_url and not is_google_news_link(real_url):
+                n['link'] = real_url
+                _, content = fetch_page_content(real_url)
+                if content:
+                    cleaned = clean_content(content, n.get('title', ''))
+                    if cleaned:
+                        n['content'] = cleaned
+                        print(f"    -> 已抓取正文: {real_url[:60]}")
+                    else:
+                        print(f"    -> 正文过滤后为空，保留RSS summary")
+                else:
+                    print(f"    -> 正文抓取失败，保留RSS summary")
+            else:
+                print(f"    -> URL解析失败，保留RSS summary")
+            time.sleep(0.5)
             continue
         if link:
             print(f"  [{i+1}/{len(news)}] 抓取: {n['title'][:30]}...")
