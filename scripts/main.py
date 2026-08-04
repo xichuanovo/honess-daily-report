@@ -227,7 +227,7 @@ def resolve_google_news_url(url):
             page.wait_for_timeout(3000)
             final_url = page.url
             browser.close()
-            if final_url and 'news.google.com' not in final_url:
+            if final_url and 'news.google.com' not in final_url and not final_url.startswith('chrome-error://'):
                 return final_url
     except ImportError:
         print("    [playwright] 未安装，跳过")
@@ -1252,8 +1252,8 @@ def main():
     # 1.5 对选中新闻补充抓取原文（仅对尚未提取正文的条目）
     print("\n[1.5/6] 抓取新闻原文...")
     for i, n in enumerate(news):
-        if n.get('content') and len(n.get('content', '')) > 100:
-            # 已有充足正文（>100字），跳过
+        if n.get('content') and len(n.get('content', '')) > 200:
+            # 已有充足正文（>200字），跳过
             print(f"  [{i+1}/{len(news)}] 已有正文: {n['title'][:30]}...")
             continue
         link = n.get('link', '')
